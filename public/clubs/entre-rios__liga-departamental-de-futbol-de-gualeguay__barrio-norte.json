@@ -1,0 +1,13 @@
+{
+  "club_id": "entre-rios__liga-departamental-de-futbol-de-gualeguay__barrio-norte",
+  "name": "Barrio Norte",
+  "full_name": "Club Atlético Barrio Norte",
+  "founded": 1950,
+  "nickname": ["El Norte"],
+  "province": "Entre Ríos",
+  "city": "Gualeguay",
+  "league": "Liga Departamental de Fútbol de Gualeguay",
+  "stadium": "Estadio Alberto \"Pocha\" Badaracco",
+  "stadium_capacity": 1500,
+  "short_history": "Breve reseña del club…"
+}

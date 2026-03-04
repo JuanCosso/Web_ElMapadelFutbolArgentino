@@ -1,0 +1,17 @@
+{
+  "Corrientes": {
+    "club_count": 2,
+    "league_count": 1,
+    "city_count": 1
+  },
+  "Entre Ríos": {
+    "club_count": 262,
+    "league_count": 19,
+    "city_count": 85
+  },
+  "Santa Fe": {
+    "club_count": 116,
+    "league_count": 4,
+    "city_count": 47
+  }
+}
