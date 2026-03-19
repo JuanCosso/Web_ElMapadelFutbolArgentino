@@ -17,8 +17,10 @@ function SegBtn({
       type="button"
       onClick={onClick}
       className={[
-        "px-2.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors",
-        active ? "bg-gray-900 text-white shadow-sm" : "bg-white/70 hover:bg-white text-gray-900",
+        "px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
+        active
+          ? "bg-gray-900 text-white shadow-sm"
+          : "bg-white/70 hover:bg-white text-gray-900",
       ].join(" ")}
     >
       {children}
@@ -40,10 +42,12 @@ export default function MapLayerControl({
   onHome: (() => void) | null;
 }) {
   return (
-    <div className="absolute bottom-4 right-4 z-20">
-      <div className="rounded-2xl bg-white/80 backdrop-blur border border-black/5 shadow-xl p-2 sm:p-3 space-y-2 max-w-[92vw]">
-        <div className="flex items-center justify-between gap-2">
-          <div className="text-[11px] sm:text-xs font-semibold tracking-wide text-gray-700">
+    // Mobile: bottom-center. Desktop: bottom-right
+    <div className="absolute bottom-16 left-1/2 -translate-x-1/2 sm:left-auto sm:translate-x-0 sm:right-4 z-20">
+      <div className="rounded-2xl bg-white/80 backdrop-blur border border-black/5 shadow-xl p-2 sm:p-3 space-y-2">
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="text-[11px] font-semibold tracking-wide text-gray-700 hidden sm:block">
             Capas
           </div>
 
@@ -52,18 +56,17 @@ export default function MapLayerControl({
             onClick={() => onHome?.()}
             disabled={!onHome}
             className={[
-              "px-2.5 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-colors flex items-center gap-2",
+              "px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5",
               onHome
                 ? "bg-white/70 hover:bg-white text-gray-900 border border-black/5"
                 : "bg-white/40 text-gray-400 border border-black/5 cursor-not-allowed",
             ].join(" ")}
-            title="Volver a inicio"
             aria-label="Volver a inicio"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M12 3l9 8h-3v9h-5v-6H11v6H6v-9H3l9-8z"></path>
+            <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 3l9 8h-3v9h-5v-6H11v6H6v-9H3l9-8z" fill="currentColor" />
             </svg>
-            Inicio
+            <span className="hidden sm:inline">Inicio</span>
           </button>
         </div>
 
@@ -79,11 +82,12 @@ export default function MapLayerControl({
           </SegBtn>
         </div>
 
-        <label className="flex items-center gap-2 text-xs sm:text-sm text-gray-800 select-none">
+        <label className="flex items-center gap-2 text-xs text-gray-800 select-none cursor-pointer">
           <input
             type="checkbox"
             checked={roads}
             onChange={(e) => setRoads(e.target.checked)}
+            className="rounded"
           />
           Rutas
         </label>

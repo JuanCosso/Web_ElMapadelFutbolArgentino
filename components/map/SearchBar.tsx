@@ -51,7 +51,7 @@ export default function SearchBar({ index, onSelect }: Props) {
   return (
     <div
       ref={ref}
-      className="absolute top-4 left-1/2 -translate-x-1/2 z-50 w-[560px] max-w-[92vw]"
+      className="absolute top-3 sm:top-4 left-1/2 -translate-x-1/2 z-50 w-[92vw] sm:w-[560px] max-w-[92vw]"
     >
       <div className="rounded-2xl border border-black/10 bg-white/90 backdrop-blur-md shadow-lg">
         <div className="flex items-center gap-2 px-3 py-2">

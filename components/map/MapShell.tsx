@@ -1,3 +1,4 @@
+// components/map/MapShell.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -17,7 +18,6 @@ export default function MapShell() {
   const [roads, setRoads] = useState(false);
 
   const [clubsGeojson, setClubsGeojson] = useState<FeatureCollection | null>(null);
-
   useEffect(() => {
     fetch("/data/clubs.geojson")
       .then((r) => (r.ok ? r.json() : null))
@@ -37,43 +37,43 @@ export default function MapShell() {
 
   const [provinceInfo, setProvinceInfo] = useState<ProvinceInfo | null>(null);
 
-  const [clubInfo, setClubInfo] = useState<ClubInfo | null>(null);
+  // ✅ Un solo objeto para el club seleccionado
+  const [selectedClub, setSelectedClub] = useState<ClubInfo | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [selectedClubId, setSelectedClubId] = useState<string | null>(null);
-  const [selectedBadgeUrl, setSelectedBadgeUrl] = useState<string | undefined>(undefined);
-  const [selectedClubName, setSelectedClubName] = useState<string | undefined>(undefined);
-  const [selectedClubFullName, setSelectedClubFullName] = useState<string | undefined>(undefined);
 
+  // Club bajo el cursor
   const [hoverClub, setHoverClub] = useState<ClubInfo | null>(null);
 
   const [goHome, setGoHome] = useState<(() => void) | null>(null);
   const handleHomeReady = (fn: (() => void) | null) => setGoHome(fn ? () => fn : null);
 
-  const clearClubClick = () => {
-    setClubInfo(null);
+  const openClub = (info: ClubInfo) => {
+    setSelectedClub(info);
+    setDrawerOpen(true);
+  };
+  const closeClub = () => {
+    setSelectedClub(null);
     setDrawerOpen(false);
-    setSelectedClubId(null);
-    setSelectedBadgeUrl(undefined);
-    setSelectedClubName(undefined);
-    setSelectedClubFullName(undefined);
   };
 
-  const activeClub = hoverClub ?? clubInfo;
+  // El panel muestra hover si existe, si no el seleccionado
+  const panelClub = hoverClub ?? selectedClub;
 
   const onSearchSelect = (item: SearchItem) => {
     if (!mapApi) return;
-
     if (item.type === "club") {
       mapApi.flyTo(item.center, 13);
-      setSelectedClubId(item.club_id);
-      setSelectedBadgeUrl(item.badge_url);
-      setSelectedClubName(item.label);
-      setSelectedClubFullName(item.full_name);
-      setDrawerOpen(true);
+      openClub({
+        clubId: item.club_id,
+        name: item.label,
+        fullName: item.full_name,
+        province: item.province ?? "",
+        city: item.city ?? "",
+        league: item.league ?? "",
+        badgeUrl: item.badge_url,
+      });
       return;
     }
-
-    // ✅ provincia/ciudad: encuadrar, pero NO “seleccionar provincia”
     mapApi.fitBBox(item.bbox);
   };
 
@@ -87,23 +87,18 @@ export default function MapShell() {
         onProvinceInfo={setProvinceInfo}
         onClubHover={setHoverClub}
         onClubInfo={(info) => {
-          setClubInfo(info);
-
-          if (info) {
-            setSelectedClubId(info.clubId);
-            setSelectedBadgeUrl(info.badgeUrl);
-            setSelectedClubName(info.name);
-            setSelectedClubFullName(info.fullName);
-            setDrawerOpen(true);
-          } else {
-            clearClubClick();
-          }
+          if (info) openClub(info);
+          else closeClub();
         }}
         onHomeReady={handleHomeReady}
         onMapApiReady={setMapApi}
       />
 
-      <MapPanel provinceInfo={provinceInfo} activeClub={activeClub} />
+      <MapPanel
+        provinceInfo={provinceInfo}
+        activeClub={panelClub}
+        isHover={!!hoverClub}
+      />
 
       <MapLayerControl
         basemap={basemap}
@@ -113,13 +108,11 @@ export default function MapShell() {
         onHome={goHome}
       />
 
+      {/* ✅ Ahora recibe el objeto completo */}
       <ClubDrawer
         open={drawerOpen}
-        clubId={selectedClubId}
-        badgeUrl={selectedBadgeUrl}
-        clubName={selectedClubName}
-        clubFullName={selectedClubFullName}
-        onClose={clearClubClick}
+        club={selectedClub}
+        onClose={closeClub}
       />
     </div>
   );

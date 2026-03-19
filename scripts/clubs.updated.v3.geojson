@@ -3240,6 +3240,27 @@
       "geometry": {
         "type": "Point",
         "coordinates": [
+          -58.4887507,
+          -32.4634333
+        ]
+      },
+      "properties": {
+        "club_id": "entre-rios__liga-regional-de-futbol-de-basavilbaso__juventud",
+        "name": "Juventud",
+        "full_name": "Club Social y Deportivo Juventud",
+        "province": "Entre Ríos",
+        "city": "Caseros",
+        "league": "Liga Regional de Fútbol de Basavilbaso",
+        "badge_url": "/badges/entre-rios__liga-regional-de-futbol-de-basavilbaso__juventud.webp",
+        "badge_src_mymaps": "https://mymaps.usercontent.google.com/hostedimage/m/*/3ALCsBorZSmkB-6XOkVzqLdv-jeKM1qaaofc2wsXya3YuH1K4ZsHSh-IUX9RsvAHG0wn0Co_efecuahZYh7YuYsp8MIQUAhODWFXfULOAbT212OvrunIPehzNErsMDXS93QTGLPoELMe5vC_LWE_FZJ6FtQy-IHbx0Nn71UjjIgtsgZlX5NEqSC0DFK-mTv9M24WIq8Wv18fLm2fDu4U8kJoqOny-YJlpYHThfgiiKm_8uzR3hSIVQDo7pptWVic?authuser=0&fife=s16383",
+        "badge_src_rar_path": "escudos arg/Consejo Federal/Entre Ríos/Liga Departamental de Fútbol de Colón/Juventud de Caseros.png"
+      }
+    },
+    {
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
           -58.2047921,
           -32.1644536
         ]

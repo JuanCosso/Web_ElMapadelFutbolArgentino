@@ -1,6 +1,19 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import {
+  MapPin,
+  Globe,
+  Calendar,
+  Tag,
+  Download,
+  Clock,
+  Trophy,
+  Images,
+  Link2,
+  Shield,
+} from "lucide-react";
+import type { ClubInfo } from "./MapView";
 
 type ClubDetail = {
   club_id: string;
@@ -12,14 +25,11 @@ type ClubDetail = {
   city?: string;
   league?: string;
   stadium?: string;
-
-  // Para capacidad (acepta distintos keys)
   stadium_capacity?: number;
   capacity?: number;
   estadio_capacidad?: number;
   capacidad_estadio?: number;
   stadiumCapacity?: number;
-
   honours?: { title: string; count?: number; years?: number[] }[];
   images?: { url: string; caption?: string }[];
   short_history?: string;
@@ -28,7 +38,7 @@ type ClubDetail = {
 
 function IconBox({ children }: { children: React.ReactNode }) {
   return (
-    <span className="w-9 h-9 rounded-xl bg-gray-900/5 border border-black/5 flex items-center justify-center">
+    <span className="w-9 h-9 rounded-xl bg-gray-900/5 border border-black/5 flex items-center justify-center flex-shrink-0 text-gray-600">
       {children}
     </span>
   );
@@ -47,8 +57,8 @@ function Row({
   return (
     <div className="flex items-start gap-3">
       <IconBox>{icon}</IconBox>
-      <div className="min-w-0">
-        <div className="text-xs text-gray-500">{label}</div>
+      <div className="min-w-0 pt-1">
+        <div className="text-xs text-gray-500 leading-none mb-0.5">{label}</div>
         <div className="text-sm font-medium text-gray-900 whitespace-normal break-words leading-snug">
           {value}
         </div>
@@ -68,11 +78,11 @@ function Section({
 }) {
   return (
     <section className="rounded-2xl border border-black/10 bg-white p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="w-8 h-8 rounded-xl bg-gray-900 text-white flex items-center justify-center">
+      <div className="flex items-center gap-2 mb-4">
+        <span className="w-8 h-8 rounded-xl bg-gray-900 text-white flex items-center justify-center flex-shrink-0">
           {icon}
         </span>
-        <div className="text-xs uppercase tracking-wide text-gray-700 font-semibold">
+        <div className="text-xs uppercase tracking-widest text-gray-700 font-semibold">
           {title}
         </div>
       </div>
@@ -83,37 +93,26 @@ function Section({
 
 export default function ClubDrawer({
   open,
-  clubId,
-  badgeUrl,
-  clubName,
-  clubFullName,
+  club,
   onClose,
 }: {
   open: boolean;
-  clubId: string | null;
-  badgeUrl?: string;
-  clubName?: string;
-  clubFullName?: string;
+  club: ClubInfo | null;
   onClose: () => void;
 }) {
   const [data, setData] = useState<ClubDetail | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!open || !clubId) return;
-
-    // eslint-disable-next-line
+    if (!open || !club?.clubId) return;
     setLoading(true);
     setData(null);
-
-    fetch(`/clubs/${clubId}.json`)
+    fetch(`/clubs/${club.clubId}.json`)
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => setData(j))
       .finally(() => setLoading(false));
-  }, [open, clubId]);
+  }, [open, club?.clubId]);
 
-  const title = clubFullName || clubName || clubId || "Club";
- 
   const capacity = useMemo(() => {
     if (!data) return undefined;
     return (
@@ -125,7 +124,10 @@ export default function ClubDrawer({
     );
   }, [data]);
 
-  if (!open) return null;
+  if (!open || !club) return null;
+
+  const title = club.fullName || club.name || club.clubId || "Club";
+  const downloadName = `${club.clubId ?? "escudo"}.webp`;
 
   return (
     <div className="fixed inset-0 z-40">
@@ -135,148 +137,174 @@ export default function ClubDrawer({
         aria-label="Cerrar"
       />
 
-      <aside className="absolute right-0 top-0 h-full w-[460px] max-w-[92vw] bg-gray-50 shadow-2xl border-l border-black/10">
-        <div className="h-full flex flex-col">
-          {/* Top bar solo X */}
-          <div className="p-3 border-b border-black/10 bg-white flex justify-end">
-            <button
-              onClick={onClose}
-              type="button"
-              className="w-10 h-10 rounded-xl bg-gray-900 text-white flex items-center justify-center"
-              aria-label="Cerrar"
-              title="Cerrar"
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M18 6L6 18M6 6l12 12"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
+    <aside className="
+      absolute bottom-0 left-0 right-0 rounded-t-3xl
+      sm:bottom-auto sm:top-0 sm:left-auto sm:right-0 sm:rounded-none sm:rounded-l-none
+      h-[90vh] sm:h-full
+      w-full sm:w-[460px]
+      bg-gray-50 shadow-2xl border-t sm:border-t-0 sm:border-l border-black/10
+      flex flex-col
+    ">
+      {/* Handle visual solo en mobile */}
+      <div className="flex justify-center pt-3 pb-1 sm:hidden">
+        <div className="w-10 h-1 rounded-full bg-gray-300" />
+      </div>
+
+      {/* Header */}
+      <div className="px-3 py-2 border-b border-black/10 bg-white flex items-center justify-end min-h-[52px] pt-14 sm:pt-2">
+        <button
+          onClick={onClose}
+          type="button"
+          className="w-10 h-10 rounded-xl bg-gray-900 text-white flex items-center justify-center flex-shrink-0"
+          aria-label="Cerrar"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+            <path d="M18 6L6 18M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+
+        {/* Contenido */}
+        <div className="flex-1 overflow-auto p-4 space-y-4">
+
+          {/* Hero */}
+          <div className="rounded-3xl bg-white border border-black/10 p-5">
+            <div className="flex flex-col items-center text-center">
+              {club.badgeUrl ? (
+                <img
+                  src={club.badgeUrl}
+                  alt={`Escudo de ${club.name}`}
+                  className="w-36 h-36 sm:w-44 sm:h-44 object-contain"
+                  loading="eager"
+                  decoding="async"
                 />
-              </svg>
-            </button>
-          </div>
-
-          <div className="p-4 overflow-auto space-y-4">
-            {/* Hero: escudo grande + nombre */}
-            <div className="rounded-3xl bg-white border border-black/10 p-5">
-              <div className="flex flex-col items-center text-center">
-                {badgeUrl ? (
-                  <img
-                    src={badgeUrl}
-                    alt=""
-                    className="w-44 h-44 sm:w-48 sm:h-48 object-contain"
-                    loading="eager"
-                    decoding="async"
-                  />
-                ) : (
-                  <div className="w-44 h-44 rounded-3xl bg-gray-200" />
-                )}
-
-                <div className="mt-4 text-xl font-extrabold text-gray-900 leading-tight">
-                  {title}
+              ) : (
+                <div className="w-36 h-36 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-300">
+                  <Shield size={48} strokeWidth={1.5} />
                 </div>
-              </div>
-            </div>
+              )}
 
-            {loading && (
-              <div className="rounded-2xl bg-white border border-black/10 p-4 text-sm text-gray-700">
-                Cargando ficha…
+              <div className="mt-4 text-xl font-extrabold text-gray-900 leading-tight">
+                {title}
               </div>
-            )}
 
-            {data && (
-              <>
-                <Section
-                  title="Datos"
-                  icon={
-                    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-                      <path d="M12 2l9 4v6c0 5-3.8 9.7-9 10-5.2-.3-9-5-9-10V6l9-4z" fill="currentColor" />
-                    </svg>
-                  }
+              {club.badgeUrl && (
+                <a
+                  href={club.badgeUrl}
+                  download={downloadName}
+                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-700 transition-colors"
                 >
-                  <div className="space-y-3">
-                    <Row
-                      icon={
-                        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M7 3v2M17 3v2M4 7h16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        </svg>
-                      }
-                      label="Fundación"
-                      value={data.founded}
-                    />
-
-                    <Row
-                      icon={
-                        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M12 12c2.8 0 5-2.2 5-5S14.8 2 12 2 7 4.2 7 7s2.2 5 5 5z" fill="none" stroke="currentColor" strokeWidth="2" />
-                          <path d="M4 22c1.6-4 5-6 8-6s6.4 2 8 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        </svg>
-                      }
-                      label="Apodo"
-                      value={Array.isArray(data.nickname) ? data.nickname.join(", ") : data.nickname}
-                    />
-
-                    <Row
-                      icon={
-                        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M12 21s7-4.4 7-11a7 7 0 1 0-14 0c0 6.6 7 11 7 11z" fill="none" stroke="currentColor" strokeWidth="2" />
-                          <circle cx="12" cy="10" r="2" fill="currentColor" />
-                        </svg>
-                      }
-                      label="Ciudad"
-                      value={data.city}
-                    />
-
-                    <Row
-                      icon={
-                        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0V4z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        </svg>
-                      }
-                      label="Liga"
-                      value={data.league}
-                    />
-
-                    <Row
-                      icon={
-                        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M3 10l9-7 9 7v10a2 2 0 0 1-2 2h-4v-6H9v6H5a2 2 0 0 1-2-2V10z" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        </svg>
-                      }
-                      label="Estadio"
-                      value={data.stadium}
-                    />
-
-                    <Row
-                      icon={
-                        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-                          <path d="M4 10h16M6 14h12M8 18h8" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        </svg>
-                      }
-                      label="Capacidad"
-                      value={capacity ? `${capacity} personas` : undefined}
-                    />
-                  </div>
-                </Section>
-
-                {data.short_history && (
-                  <Section
-                    title="Resumen"
-                    icon={
-                      <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M12 8v5l3 3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                        <path d="M21 12a9 9 0 1 1-3-6.7" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                      </svg>
-                    }
-                  >
-                    <p className="text-sm text-gray-800 leading-relaxed">{data.short_history}</p>
-                  </Section>
-                )}
-              </>
-            )}
+                  <Download size={15} />
+                  Descargar escudo
+                </a>
+              )}
+            </div>
           </div>
+
+          {/* Datos */}
+          <Section title="Datos" icon={<Shield size={15} />}>
+            <div className="space-y-3">
+              <Row icon={<MapPin size={15} />}    label="Ciudad"    value={club.city || undefined} />
+              <Row icon={<Globe size={15} />}      label="Liga"      value={club.league || undefined} />
+              {data?.founded && (
+                <Row icon={<Calendar size={15} />} label="Fundación" value={data.founded} />
+              )}
+              {data?.nickname && (
+                <Row
+                  icon={<Tag size={15} />}
+                  label="Apodo"
+                  value={Array.isArray(data.nickname) ? data.nickname.join(", ") : data.nickname}
+                />
+              )}
+              {data?.stadium && (
+                <Row
+                  icon={<Trophy size={15} />}
+                  label="Estadio"
+                  value={
+                    capacity
+                      ? `${data.stadium} · ${capacity.toLocaleString("es-AR")} espectadores`
+                      : data.stadium
+                  }
+                />
+              )}
+            </div>
+          </Section>
+
+          {/* Historia */}
+          {data?.short_history && (
+            <Section title="Historia" icon={<Clock size={15} />}>
+              <p className="text-sm text-gray-700 leading-relaxed">{data.short_history}</p>
+            </Section>
+          )}
+
+          {/* Palmarés */}
+          {data?.honours && data.honours.length > 0 && (
+            <Section title="Palmarés" icon={<Trophy size={15} />}>
+              <ul className="space-y-1.5">
+                {data.honours.map((h, i) => (
+                  <li key={i} className="text-sm text-gray-800 flex items-start gap-2">
+                    <span className="text-gray-400 mt-0.5">·</span>
+                    <span>
+                      <span className="font-medium">{h.title}</span>
+                      {h.count != null && (
+                        <span className="text-gray-500 ml-1">({h.count}×)</span>
+                      )}
+                      {h.years && h.years.length > 0 && (
+                        <span className="text-gray-400 ml-1 text-xs">{h.years.join(", ")}</span>
+                      )}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </Section>
+          )}
+
+          {/* Galería */}
+          {data?.images && data.images.length > 0 && (
+            <Section title="Galería" icon={<Images size={15} />}>
+              <div className="grid grid-cols-2 gap-2">
+                {data.images.map((img, i) => (
+                  <div key={i} className="rounded-xl overflow-hidden bg-gray-100">
+                    <img
+                      src={img.url}
+                      alt={img.caption ?? ""}
+                      className="w-full h-32 object-cover"
+                      loading="lazy"
+                    />
+                    {img.caption && (
+                      <div className="px-2 py-1 text-xs text-gray-500">{img.caption}</div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {/* Enlaces */}
+          {data?.links && data.links.length > 0 && (
+            <Section title="Enlaces" icon={<Link2 size={15} />}>
+              <div className="flex flex-wrap gap-2">
+                {data.links.map((l, i) => (
+                  <a
+                    key={i}
+                    href={l.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-gray-800 bg-gray-100 border border-black/10 rounded-lg px-3 py-1.5 hover:bg-gray-200 transition-colors"
+                  >
+                    {l.label}
+                  </a>
+                ))}
+              </div>
+            </Section>
+          )}
+
+          {loading && (
+            <div className="rounded-2xl bg-white border border-black/10 p-4 text-sm text-gray-500 text-center">
+              Cargando datos adicionales…
+            </div>
+          )}
+
         </div>
       </aside>
     </div>
