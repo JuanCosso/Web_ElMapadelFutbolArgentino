@@ -16,7 +16,20 @@ export async function GET(request: Request) {
     // 1. ST_MakeEnvelope filtra geométricamente solo lo visible en pantalla.
     // 2. ORDER BY tier DESC asegura que los clubes más importantes (ej: tier 1) 
     //    vengan al final del JSON, por lo que MapLibre los dibujará ARRIBA de los demás.
-    const clubs = await prisma.$queryRaw`
+    const clubs = await prisma.$queryRaw<
+      {
+        club_id: string;
+        name: string;
+        slug: string;
+        badge_url: string | null;
+        league: string | null;
+        city: string | null;
+        province: string | null;
+        lng: number;
+        lat: number;
+        tier: number;
+      }[]
+    >`
       SELECT 
         id as club_id, 
         "fullName" as name, 
@@ -38,7 +51,7 @@ export async function GET(request: Request) {
     // Convertir el resultado de SQL a GeoJSON válido para MapLibre
     const geojson = {
       type: "FeatureCollection",
-      features: (clubs as any[]).map((c) => ({
+      features: clubs.map((c) => ({
         type: "Feature",
         geometry: { type: "Point", coordinates: [c.lng, c.lat] },
         properties: {
@@ -57,6 +70,6 @@ export async function GET(request: Request) {
     return NextResponse.json(geojson);
   } catch (error) {
     console.error("Error en PostGIS BBox:", error);
-    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+    return NextResponse.json({ type: "FeatureCollection", features: [] });
   }
 }

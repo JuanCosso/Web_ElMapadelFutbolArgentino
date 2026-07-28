@@ -3,13 +3,7 @@ import type { StyleSpecification } from "maplibre-gl";
 
 export type BasemapId = "streets" | "satellite" | "relief";
 
-// Expresión robusta para sacar el ID del club desde properties
-const CLUB_ID_EXPR = [
-  "to-string",
-  ["coalesce", ["get", "club_id"], ["get", "clubId"], ["get", "id"], ["get", "slug"]],
-] as any;
-
-const CLUBS_MINZOOM = 6; // probá 6 o 7
+const CLUBS_MINZOOM = 3;
 
 export const STYLE: StyleSpecification = {
   version: 8,

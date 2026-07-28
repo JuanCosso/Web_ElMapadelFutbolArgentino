@@ -3,18 +3,48 @@ import { PrismaPg } from "@prisma/adapter-pg";
 
 const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
 
-if (!process.env.DATABASE_URL) {
-  throw new Error("DATABASE_URL is required to connect to Neon.");
+export function getPrisma(): PrismaClient | null {
+  if (!process.env.DATABASE_URL) {
+    return null;
+  }
+
+  if (!globalForPrisma.prisma) {
+    const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+    globalForPrisma.prisma = new PrismaClient({ adapter });
+  }
+
+  return globalForPrisma.prisma;
 }
 
-const adapter = new PrismaPg({ connectionString: process.env.DATABASE_URL });
+export const prisma: PrismaClient = new Proxy({} as PrismaClient, {
+  get(_target, prop: string | symbol) {
+    const client = getPrisma();
+    if (client) {
+      const val = (client as unknown as Record<string | symbol, unknown>)[prop];
+      if (typeof val === "function") {
+        return val.bind(client);
+      }
+      return val;
+    }
 
-export const prisma =
-  globalForPrisma.prisma ??
-  new PrismaClient({
-    adapter,
-  });
+    if (
+      prop === "$queryRaw" ||
+      prop === "$queryRawUnsafe" ||
+      prop === "$executeRaw" ||
+      prop === "$executeRawUnsafe"
+    ) {
+      return async () => [];
+    }
 
-if (process.env.NODE_ENV !== "production") {
-  globalForPrisma.prisma = prisma;
-}
+    return new Proxy({}, {
+      get(_modelTarget, method: string | symbol) {
+        return async () => {
+          if (method === "findMany") return [];
+          if (method === "count") return 0;
+          return null;
+        };
+      },
+    });
+  },
+});
+

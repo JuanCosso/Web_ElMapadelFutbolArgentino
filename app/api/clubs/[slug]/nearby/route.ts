@@ -9,7 +9,7 @@ export async function GET(
 
   try {
     // 1. Buscamos las coordenadas exactas del club principal
-    const centerClub: any[] = await prisma.$queryRaw`
+    const centerClub = await prisma.$queryRaw<{ id: string; lng: number; lat: number }[]>`
       SELECT id, ST_X(location::geometry) as lng, ST_Y(location::geometry) as lat 
       FROM "Club" WHERE slug = ${slug} LIMIT 1
     `;
@@ -19,7 +19,7 @@ export async function GET(
 
     // 2. PostGIS busca los 5 más cercanos usando el operador "<->" (distancia espacial)
     // ST_Distance con ::geography calcula la distancia real tomando en cuenta la curvatura de la Tierra.
-    const nearbyClubs = await prisma.$queryRaw`
+    const nearbyClubs = await prisma.$queryRaw<{ name: string; slug: string; crestUrl: string | null; distance_km: number }[]>`
       SELECT 
         "fullName" as name, 
         "slug", 
@@ -32,7 +32,7 @@ export async function GET(
     `;
 
     // Convertimos BigInts a Number por las dudas (Prisma a veces devuelve BigInt en count/round)
-    const formatted = (nearbyClubs as any[]).map(c => ({
+    const formatted = nearbyClubs.map(c => ({
       ...c,
       distance_km: Number(c.distance_km)
     }));
@@ -40,6 +40,6 @@ export async function GET(
     return NextResponse.json(formatted);
   } catch (error) {
     console.error("Error PostGIS Nearby:", error);
-    return NextResponse.json({ error: "Error interno" }, { status: 500 });
+    return NextResponse.json([]);
   }
 }

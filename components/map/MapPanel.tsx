@@ -3,6 +3,28 @@
 import React from "react";
 import type { ProvinceInfo, ClubInfo } from "./MapView";
 
+function MapPanelBadge({ badgeUrl, clubId, name }: { badgeUrl?: string; clubId?: string; name: string }) {
+  const initialSrc = badgeUrl || (clubId ? `/badges/${clubId}.webp` : "");
+
+  return (
+    <img
+      key={`${clubId}-${badgeUrl}`}
+      src={initialSrc}
+      className="w-10 h-10 object-contain flex-shrink-0"
+      alt={name}
+      onError={(e) => {
+        const target = e.currentTarget;
+        const fallback = clubId ? `/badges/${clubId}.webp` : "";
+        if (fallback && target.src !== new URL(fallback, window.location.href).href) {
+          target.src = fallback;
+        } else {
+          target.style.display = "none";
+        }
+      }}
+    />
+  );
+}
+
 export default function MapPanel({
   provinceInfo,
   activeClub,
@@ -43,15 +65,11 @@ export default function MapPanel({
 
           {activeClub ? (
             <div className="mt-2 flex gap-3 items-center">
-              {activeClub.badgeUrl ? (
-                <img
-                  src={activeClub.badgeUrl}
-                  className="w-10 h-10 object-contain flex-shrink-0"
-                  alt=""
-                />
-              ) : (
-                <div className="w-10 h-10 rounded-xl bg-gray-200 flex-shrink-0" />
-              )}
+              <MapPanelBadge
+                badgeUrl={activeClub.badgeUrl}
+                clubId={activeClub.clubId}
+                name={activeClub.name}
+              />
               <div className="min-w-0">
                 <div className="font-semibold text-gray-900 line-clamp-2 leading-tight">
                   {activeClub.name}

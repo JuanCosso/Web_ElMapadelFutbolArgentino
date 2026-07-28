@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import {prisma} from "@/lib/prisma";
-import Image from "next/image";
 import Link from "next/link";
+import { ClubCrest } from "@/components/club/ClubCrest";
 
 // 1. Generamos los Metadata para SEO (Para que quede lindo al pasarlo por WhatsApp)
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }) {
@@ -43,10 +43,10 @@ export default async function ClubPage({ params }: { params: Promise<{ slug: str
       <main className="max-w-4xl mx-auto mt-8 px-4">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-8 flex flex-col md:flex-row gap-8 items-center md:items-start">
           
-          <img 
-            src={club.crestUrl || `/badges/${club.slug}.webp`} 
-            alt={`Escudo de ${club.fullName}`} 
-            className="w-48 h-48 object-contain"
+          <ClubCrest 
+            crestUrl={club.crestUrl} 
+            slug={club.slug} 
+            fullName={club.fullName} 
           />
           
           <div className="flex-1 space-y-4 text-center md:text-left">

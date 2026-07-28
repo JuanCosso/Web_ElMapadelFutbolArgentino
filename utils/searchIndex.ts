@@ -118,7 +118,7 @@ export function buildSearchIndex(features: ClubFeature[]): SearchItem[] {
       const full_name = p.full_name || p.fullName || p.nombre_completo || undefined;
 
       const club_id = String(p.club_id || p.id || p.clubId || p.slug || "");
-      const badge_url = p.badge_url || p.badgeUrl || p.badge || undefined;
+      const badge_url = p.badge_url || p.badgeUrl || p.badge || (club_id ? `/badges/${club_id}.webp` : undefined);
 
       const c = f.geometry.coordinates as [number, number];
 
@@ -183,15 +183,6 @@ export function buildSearchIndex(features: ClubFeature[]): SearchItem[] {
   });
 
   return [...provinces, ...cities, ...clubs];
-}
-
-type Scored = { item: SearchItem; score: number };
-
-function scoreText(q: string, field: string, wStarts: number, wIncl: number) {
-  if (!field) return 0;
-  if (field.startsWith(q)) return wStarts;
-  if (field.includes(q)) return wIncl;
-  return 0;
 }
 
 /**

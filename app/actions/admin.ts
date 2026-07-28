@@ -19,8 +19,8 @@ export async function getAdminFormData() {
   });
   
   const competitions = await prisma.competition.findMany({ 
-    select: { id: true, name: true, type: true },
-    orderBy: { name: 'asc' } 
+    select: { id: true, name: true, type: true, level: true },
+    orderBy: [{ level: 'asc' }, { name: 'asc' }] 
   });
 
   return { provinces, localities, leagues, competitions };
@@ -42,7 +42,8 @@ export async function searchFullClubsForAdmin(query: string) {
       locality: { 
         include: { province: true } // Traemos la provincia para mostrar en la UI
       },
-      competitions: { select: { id: true } }
+      competitions: { select: { id: true, name: true, type: true, level: true } },
+      titles: { select: { id: true, name: true, count: true } },
     },
     take: 12
   });
@@ -52,12 +53,12 @@ export async function searchFullClubsForAdmin(query: string) {
 
 export async function getClubLocation(clubId: string) {
   try {
-    const res: any[] = await prisma.$queryRaw`
+    const res = await prisma.$queryRaw<{ lng: number; lat: number }[]>`
       SELECT ST_X(location::geometry) as lng, ST_Y(location::geometry) as lat
       FROM "Club" WHERE id = CAST(${clubId} AS UUID) LIMIT 1
     `;
     return res.length ? { lat: res[0].lat, lng: res[0].lng } : null;
-  } catch (e) {
+  } catch {
     return null;
   }
 }

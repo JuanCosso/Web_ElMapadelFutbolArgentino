@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   MapPin,
-  Globe,
   Calendar,
   Tag,
   Download,
@@ -37,6 +36,7 @@ type ClubDetail = {
   badgeUrl?: string;
   honours?: { title: string; count?: number; years?: number[] }[];
   short_history?: string;
+  history?: string;
   nearby?: NearbyClub[];
 };
 
@@ -76,23 +76,38 @@ export default function ClubDrawer({
   // Fetch de datos
   useEffect(() => {
     if (!open || !club?.clubId) return;
+    let ignore = false;
     
-    setLoading(true);
-    setData(null);
-    setActiveTab("info"); // Reseteamos a la primera pestaña siempre que abrimos un club nuevo
+    Promise.resolve().then(() => {
+      if (!ignore) {
+        setLoading(true);
+        setData(null);
+        setActiveTab("info"); // Reseteamos a la primera pestaña siempre que abrimos un club nuevo
+      }
+    });
 
     fetch(`/api/clubs/${encodeURIComponent(club.clubId)}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((j) => setData(j))
-      .finally(() => setLoading(false));
+      .then((j) => {
+        if (!ignore) setData(j);
+      })
+      .finally(() => {
+        if (!ignore) setLoading(false);
+      });
+
+    return () => {
+      ignore = true;
+    };
   }, [open, club?.clubId]);
 
   // Manejo de la URL silenciosa para SEO y Compartir
   useEffect(() => {
     if (open && club?.clubId) {
       window.history.pushState(null, "", `/club/${club.clubId}`);
-    } else if (!open && club) {
-      window.history.pushState(null, "", "/");
+    } else {
+      if (typeof window !== "undefined" && window.location.pathname.startsWith("/club/")) {
+        window.history.pushState(null, "", "/");
+      }
     }
   }, [open, club?.clubId]);
 
@@ -101,14 +116,15 @@ export default function ClubDrawer({
     return data.stadiumCapacity;
   }, [data]);
 
+  const finalBadgeUrl = data?.badgeUrl || club?.badgeUrl || (club?.clubId ? `/badges/${club.clubId}.webp` : "");
+
   if (!open || !club) return null;
 
   const title = data?.full_name || data?.name || club.fullName || club.name || "Club";
   const downloadName = `${club.clubId ?? "escudo"}.webp`;
-  const finalBadgeUrl = data?.badgeUrl || club.badgeUrl;
 
-  const hasHistory = !!data?.short_history;
-  const hasHonours = !!data?.honours && data.honours.length > 0;
+  const hasHistory = !!(data?.short_history || data?.history);
+  const hasHonours = !!(data?.honours && data.honours.length > 0);
 
   return (
     <div className="fixed inset-0 z-40 pointer-events-none">
@@ -152,11 +168,20 @@ export default function ClubDrawer({
           <div className="px-6 pb-6 pt-2 flex flex-col items-center text-center">
             {finalBadgeUrl ? (
               <img
+                key={`${club.clubId}-${finalBadgeUrl}`}
                 src={finalBadgeUrl}
                 alt={`Escudo de ${club.name}`}
                 className="w-32 h-32 sm:w-40 sm:h-40 object-contain drop-shadow-sm"
                 loading="eager"
-                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+                onError={(e) => {
+                  const target = e.currentTarget;
+                  const fallback = club?.clubId ? `/badges/${club.clubId}.webp` : "";
+                  if (fallback && target.src !== new URL(fallback, window.location.href).href) {
+                    target.src = fallback;
+                  } else {
+                    target.style.display = "none";
+                  }
+                }}
               />
             ) : (
               <div className="w-32 h-32 rounded-3xl bg-gray-50 flex items-center justify-center text-gray-300">
@@ -275,13 +300,13 @@ export default function ClubDrawer({
                 )}
 
                 {/* PESTAÑA: HISTORIA */}
-                {activeTab === "historia" && data?.short_history && (
+                {activeTab === "historia" && (data?.short_history || data?.history) && (
                   <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 animate-in fade-in slide-in-from-bottom-2 duration-300">
                     <div className="flex items-center gap-2 mb-4 text-[11px] font-bold text-gray-600 uppercase tracking-widest">
                       <Clock size={16} className="text-gray-900" /> Reseña Histórica
                     </div>
                     <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-medium">
-                      {data.short_history}
+                      {data.short_history || data.history}
                     </p>
                   </div>
                 )}

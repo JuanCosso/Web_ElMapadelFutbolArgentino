@@ -18,6 +18,38 @@ function TypePill({ t }: { t: SearchItem["type"] }) {
   );
 }
 
+function SearchClubBadge({
+  badgeUrl,
+  clubId,
+  name,
+}: {
+  badgeUrl?: string;
+  clubId?: string;
+  name: string;
+}) {
+  const initialSrc = badgeUrl || (clubId ? `/badges/${clubId}.webp` : "");
+
+  return (
+    <img
+      key={`${clubId}-${badgeUrl}`}
+      src={initialSrc}
+      alt={name}
+      width={24}
+      height={24}
+      className="w-6 h-6 rounded-md object-contain shrink-0"
+      onError={(e) => {
+        const target = e.currentTarget;
+        const fallback = clubId ? `/badges/${clubId}.webp` : "";
+        if (fallback && target.src !== new URL(fallback, window.location.href).href) {
+          target.src = fallback;
+        } else {
+          target.style.display = "none";
+        }
+      }}
+    />
+  );
+}
+
 export default function SearchBar({ index, onSelect }: Props) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
@@ -148,16 +180,16 @@ export default function SearchBar({ index, onSelect }: Props) {
                   >
                     <TypePill t={r.type} />
 
-                    {"badge_url" in r && r.badge_url ? (
-                      <img
-                        src={r.badge_url}
-                        alt=""
-                        width={24}
-                        height={24}
-                        className="rounded-md object-contain"
+                    {r.type === "club" ? (
+                      <SearchClubBadge
+                        badgeUrl={r.badge_url}
+                        clubId={r.club_id}
+                        name={r.label}
                       />
                     ) : (
-                      <span className="w-6 h-6 rounded-md bg-gray-100 border border-black/10" />
+                      <span className="w-6 h-6 rounded-md bg-gray-100 border border-black/10 flex items-center justify-center text-[10px] shrink-0 font-bold text-gray-500">
+                        {r.type === "province" ? "PROV" : "CIUD"}
+                      </span>
                     )}
 
                     <div className="min-w-0">
