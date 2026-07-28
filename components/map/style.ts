@@ -55,11 +55,11 @@ export const STYLE: StyleSpecification = {
       attribution: "Esri",
     },
 
-    provincias: { type: "geojson", data: "/data/provincias.geojson", generateId: true },
+    provincias: { type: "geojson", data: "/api/map/provinces", generateId: true },
 
     clubs: {
       type: "geojson",
-      data: "/data/clubs.geojson",
+      data: "/api/map/clubs",
     },
   },
 

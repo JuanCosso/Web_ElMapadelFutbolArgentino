@@ -107,7 +107,7 @@ export default function ClubDrawer({
     if (!open || !club?.clubId) return;
     setLoading(true);
     setData(null);
-    fetch(`/clubs/${club.clubId}.json`)
+    fetch(`/api/clubs/${encodeURIComponent(club.clubId)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => setData(j))
       .finally(() => setLoading(false));

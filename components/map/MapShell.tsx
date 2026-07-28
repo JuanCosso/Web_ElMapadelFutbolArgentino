@@ -19,7 +19,7 @@ export default function MapShell() {
 
   const [clubsGeojson, setClubsGeojson] = useState<FeatureCollection | null>(null);
   useEffect(() => {
-    fetch("/data/clubs.geojson")
+    fetch("/api/map/clubs")
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => (j?.type === "FeatureCollection" ? setClubsGeojson(j) : null))
       .catch(() => {});

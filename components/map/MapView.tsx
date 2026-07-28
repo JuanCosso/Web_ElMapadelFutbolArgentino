@@ -89,12 +89,7 @@ export default function MapView({
   const HOME_ZOOM = 3;
 
   useEffect(() => {
-    fetch("/data/province_stats.json")
-      .then((r) => r.json())
-      .then((j) => (statsRef.current = j))
-      .catch(() => {});
-  
-    fetch("/data/clubs.geojson")
+    fetch("/api/map/clubs")
       .then((r) => r.json())
       .then((fc) => {
         const m: Record<string, string> = {};
@@ -225,7 +220,7 @@ export default function MapView({
 
       // Provincias + stats
       try {
-        const prov = await fetch("/data/provincias.geojson").then((r) => r.json());
+        const prov = await fetch("/api/map/provinces").then((r) => r.json());
         const idx: Record<string, { club_count: number; league_count: number }> = {};
         for (const [k, v] of Object.entries(statsRef.current)) idx[normKey(k)] = v as any;
 
@@ -236,8 +231,8 @@ export default function MapView({
           f.properties = {
             ...f.properties,
             name,
-            league_count: st?.league_count ?? 0,
-            club_count: st?.club_count ?? 0,
+            league_count: st?.league_count ?? f.properties?.league_count ?? 0,
+            club_count: st?.club_count ?? f.properties?.club_count ?? 0,
           };
         });
 
