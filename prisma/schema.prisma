@@ -64,7 +64,8 @@ model Club {
   shortName       String?
   slug            String   @unique
   nickname        String?
-  foundedYear     Int?
+  foundation      String?
+  history         String?  @db.Text
   crestUrl        String?
   stadiumName     String?
   stadiumCapacity Int?

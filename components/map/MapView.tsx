@@ -39,7 +39,6 @@ function getProvinceName(props: any): string {
   return props?.nombre || props?.name || props?.provincia || props?.NOMBRE || "";
 }
 
-// ===== BADGES (NO TOCO TU LÓGICA) =====
 function normalizePublicUrl(u: string) {
   if (!u) return "";
   if (u.startsWith("http://") || u.startsWith("https://")) return u;
@@ -48,7 +47,14 @@ function normalizePublicUrl(u: string) {
   return `/${x}`;
 }
 
-// =====================================
+// ✅ Función debounce para no saturar la API al mover el mapa
+function debounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
+  let timeoutId: NodeJS.Timeout;
+  return function (...args: Parameters<T>) {
+    clearTimeout(timeoutId);
+    timeoutId = setTimeout(() => fn(...args), delay);
+  };
+}
 
 export default function MapView({
   basemap,
@@ -62,10 +68,9 @@ export default function MapView({
   basemap: BasemapId;
   showRoads: boolean;
   onProvinceInfo: (info: ProvinceInfo | null) => void;
-  onClubInfo: (info: ClubInfo | null) => void; // click
-  onClubHover?: (info: ClubInfo | null) => void; // hover
+  onClubInfo: (info: ClubInfo | null) => void;
+  onClubHover?: (info: ClubInfo | null) => void;
   onHomeReady?: (fn: (() => void) | null) => void;
-
   onMapApiReady?: (api: {
     flyTo: (center: [number, number], zoom?: number) => void;
     fitBBox: (bbox: [number, number, number, number]) => void;
@@ -73,44 +78,35 @@ export default function MapView({
 }) {
   const divRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<Map | null>(null);
-
   const statsRef = useRef<ProvinceStats>({});
   const badgeMapRef = useRef<Record<string, string>>({});
-
   const hoverProvIdRef = useRef<any>(null);
   const selectedProvIdRef = useRef<any>(null);
   const selectedProvNameRef = useRef<string | null>(null);
-
-  // (solo para evitar spam de hover al panel)
   const hoverClubIdRef = useRef<string | null>(null);
 
-  // Vista “inicio”
   const HOME_CENTER: [number, number] = [-64.0, -38.5];
   const HOME_ZOOM = 3;
 
+  // Carga inicial para Badges y SearchBar (Mantenemos tu lógica)
   useEffect(() => {
     fetch("/api/map/clubs")
       .then((r) => r.json())
       .then((fc) => {
         const m: Record<string, string> = {};
-  
-        // clubs.geojson como fuente única
         for (const f of fc.features || []) {
           const p = f.properties || {};
           const id = p.club_id || p.id || p.clubId || p.slug;
-          const url = p.badge_url || p.badgeUrl || p.badge; // por si tenés variaciones
+          const url = p.badge_url || p.badgeUrl || p.badge;
           if (!id) continue;
-  
           const sid = String(id);
           if (url) m[sid] = normalizePublicUrl(String(url));
-          else m[sid] = `/badges/${sid}.webp`; // fallback
+          else m[sid] = `/badges/${sid}.webp`;
         }
-  
         badgeMapRef.current = m;
       })
       .catch(() => {});
   }, []);
-  
 
   useEffect(() => {
     if (!divRef.current || mapRef.current) return;
@@ -127,16 +123,10 @@ export default function MapView({
 
     map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     mapRef.current = map;
-    
+
     onMapApiReady?.({
       flyTo: (center, zoom = 12.5) => {
-        map.easeTo({
-          center,
-          zoom,
-          bearing: 0,
-          pitch: 0,
-          duration: 450,
-        });
+        map.easeTo({ center, zoom, bearing: 0, pitch: 0, duration: 450 });
       },
       fitBBox: (bbox) => {
         map.fitBounds(
@@ -144,15 +134,10 @@ export default function MapView({
             [bbox[0], bbox[1]],
             [bbox[2], bbox[3]],
           ],
-          {
-            padding: { top: 30, bottom: 30, left: 30, right: 30 },
-            duration: 450,
-            maxZoom: 10,
-          }
+          { padding: { top: 30, bottom: 30, left: 30, right: 30 }, duration: 450, maxZoom: 10 }
         );
       },
     });
-
 
     const PROV_EXPR: any = [
       "coalesce",
@@ -163,7 +148,6 @@ export default function MapView({
     ];
 
     const applyProvinceFilter = (provName: string | null) => {
-      // Filtra clubs por provincia seleccionada
       if (map.getLayer("clubs_icons")) {
         map.setFilter("clubs_icons", provName ? ["==", PROV_EXPR, provName] : null);
       }
@@ -183,7 +167,6 @@ export default function MapView({
       }
       selectedProvIdRef.current = null;
       selectedProvNameRef.current = null;
-
       applyProvinceFilter(null);
       onProvinceInfo(null);
       onClubInfo(null);
@@ -192,13 +175,7 @@ export default function MapView({
 
     const goHome = () => {
       clearProvinceSelection();
-      map.easeTo({
-        center: HOME_CENTER,
-        zoom: HOME_ZOOM,
-        bearing: 0,
-        pitch: 0,
-        duration: 450,
-      });
+      map.easeTo({ center: HOME_CENTER, zoom: HOME_ZOOM, bearing: 0, pitch: 0, duration: 450 });
     };
 
     onHomeReady?.(goHome);
@@ -206,11 +183,7 @@ export default function MapView({
     const setBasemapVisibility = () => {
       if (!map.getLayer("bm_streets")) return;
       map.setLayoutProperty("bm_streets", "visibility", basemap === "streets" ? "visible" : "none");
-      map.setLayoutProperty(
-        "bm_satellite",
-        "visibility",
-        basemap === "satellite" ? "visible" : "none"
-      );
+      map.setLayoutProperty("bm_satellite", "visibility", basemap === "satellite" ? "visible" : "none");
       map.setLayoutProperty("bm_relief", "visibility", basemap === "relief" ? "visible" : "none");
       map.setLayoutProperty("overlay_roads", "visibility", showRoads ? "visible" : "none");
     };
@@ -218,7 +191,37 @@ export default function MapView({
     map.on("load", async () => {
       setBasemapVisibility();
 
-      // Provincias + stats
+      // ✅ NUEVO: Lógica dinámica de carga por Bounding Box
+      const updateViewport = debounce(async () => {
+        // Solo actualizar si pasamos cierto nivel de zoom (ej: zoom 6)
+        // para no traer todo el país si no es necesario.
+        if (map.getZoom() < 5) return; 
+
+        const bounds = map.getBounds();
+        const bboxString = `${bounds.getWest()},${bounds.getSouth()},${bounds.getEast()},${bounds.getNorth()}`;
+        
+        try {
+          const res = await fetch(`/api/map/clubs/viewport?bbox=${bboxString}`);
+          if (!res.ok) return;
+          const data = await res.json();
+          
+          // Reemplaza "clubs" por el nombre de tu source en style.ts si es diferente
+          const source = map.getSource('clubs') as GeoJSONSource;
+          if (source) {
+            source.setData(data);
+          }
+        } catch (e) {
+          console.error("Error actualizando viewport:", e);
+        }
+      }, 350); // Espera 350ms después de que el usuario deje de mover el mapa
+
+      map.on('moveend', updateViewport);
+      map.on('zoomend', updateViewport);
+      
+      // Llamada inicial para poblar el área visible
+      updateViewport();
+
+      // Resto de tu código intacto (Provincias, Badges, Hovers, Clicks)
       try {
         const prov = await fetch("/api/map/provinces").then((r) => r.json());
         const idx: Record<string, { club_count: number; league_count: number }> = {};
@@ -237,10 +240,9 @@ export default function MapView({
         });
 
         const src = map.getSource("provincias") as GeoJSONSource;
-        src.setData(prov);
+        if(src) src.setData(prov);
       } catch {}
 
-      // BADGES on-demand (TU BLOQUE, SIN CAMBIOS)
       const status: Record<string, "loading" | "loaded" | "failed"> = {};
       map.on("styleimagemissing", (e: any) => {
         const id = String(e?.id || "");
@@ -263,25 +265,19 @@ export default function MapView({
         };
         img.onerror = () => {
           status[id] = "failed";
-          console.warn("[badges] No se pudo cargar:", { id, url });
         };
         img.src = url;
       });
 
-      // Hover provincias
       map.on("mousemove", "prov_fill", (e: any) => {
         const f = e.features?.[0];
         if (!f) return;
-
         map.getCanvas().style.cursor = "pointer";
         const fid = f.id;
         if (fid == null) return;
 
         if (hoverProvIdRef.current != null && hoverProvIdRef.current !== fid) {
-          map.setFeatureState(
-            { source: "provincias", id: hoverProvIdRef.current },
-            { hover: false }
-          );
+          map.setFeatureState({ source: "provincias", id: hoverProvIdRef.current }, { hover: false });
         }
         hoverProvIdRef.current = fid;
         map.setFeatureState({ source: "provincias", id: fid }, { hover: true });
@@ -298,32 +294,23 @@ export default function MapView({
       map.on("mouseleave", "prov_fill", () => {
         map.getCanvas().style.cursor = "";
         if (hoverProvIdRef.current != null) {
-          map.setFeatureState(
-            { source: "provincias", id: hoverProvIdRef.current },
-            { hover: false }
-          );
+          map.setFeatureState({ source: "provincias", id: hoverProvIdRef.current }, { hover: false });
           hoverProvIdRef.current = null;
         }
         if (selectedProvIdRef.current == null) onProvinceInfo(null);
       });
 
-      // ✅ Click provincia => fitBounds (pero si clickeás un club, NO entra acá)
       map.on("click", "prov_fill", (e: any) => {
-        // IMPORTANTÍSIMO: si en ese punto hay un club, ignorar click de provincia
         const clubHits = map.queryRenderedFeatures(e.point, { layers: ["clubs_icons"] });
         if (clubHits.length) return;
 
         const f = e.features?.[0];
         if (!f) return;
-
         const fid = f.id;
         if (fid == null) return;
 
         if (selectedProvIdRef.current != null && selectedProvIdRef.current !== fid) {
-          map.setFeatureState(
-            { source: "provincias", id: selectedProvIdRef.current },
-            { selected: false }
-          );
+          map.setFeatureState({ source: "provincias", id: selectedProvIdRef.current }, { selected: false });
         }
         selectedProvIdRef.current = fid;
         map.setFeatureState({ source: "provincias", id: fid }, { selected: true });
@@ -337,11 +324,7 @@ export default function MapView({
             [bbox[0], bbox[1]],
             [bbox[2], bbox[3]],
           ],
-          {
-            padding: { top: 30, bottom: 30, left: 360, right: 30 },
-            duration: 450,
-            maxZoom: 9.5,
-          }
+          { padding: { top: 30, bottom: 30, left: 360, right: 30 }, duration: 450, maxZoom: 9.5 }
         );
 
         applyProvinceFilter(name);
@@ -352,25 +335,19 @@ export default function MapView({
           clubs: Number(f.properties?.club_count ?? 0),
           mode: "selected",
         });
-
         onClubInfo(null);
         clearClubHover();
       });
 
-      // Click en vacío => deselecciona provincia
       map.on("click", (ev) => {
-        const hits = map.queryRenderedFeatures(ev.point, {
-          layers: ["prov_fill", "clubs_icons"],
-        });
+        const hits = map.queryRenderedFeatures(ev.point, { layers: ["prov_fill", "clubs_icons"] });
         if (hits.length) return;
         clearProvinceSelection();
       });
 
-      // Hover club => solo panel (SIN HALO)
       map.on("mousemove", "clubs_icons", (ev: any) => {
         const f = ev.features?.[0];
         if (!f) return;
-
         map.getCanvas().style.cursor = "pointer";
 
         const p = f.properties || {};
@@ -388,10 +365,10 @@ export default function MapView({
           city: p.city || p.ciudad || "",
           league: p.league || p.liga || "",
           badgeUrl:
-           (p.badge_url && normalizePublicUrl(String(p.badge_url))) ||
-           (p.badgeUrl && normalizePublicUrl(String(p.badgeUrl))) ||
-           badgeMapRef.current[clubId] ||
-           `/badges/${clubId}.webp`,
+            (p.badge_url && normalizePublicUrl(String(p.badge_url))) ||
+            (p.badgeUrl && normalizePublicUrl(String(p.badgeUrl))) ||
+            badgeMapRef.current[clubId] ||
+            `/badges/${clubId}.webp`,
         });
       });
 
@@ -400,7 +377,6 @@ export default function MapView({
         clearClubHover();
       });
 
-      // ✅ Click club => drawer (aislado; no deja que se encadene con provincia)
       map.on("click", "clubs_icons", (ev: any) => {
         const oe = ev?.originalEvent as MouseEvent | undefined;
         oe?.preventDefault?.();

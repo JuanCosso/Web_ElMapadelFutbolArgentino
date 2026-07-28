@@ -9,11 +9,19 @@ import {
   Download,
   Clock,
   Trophy,
-  Images,
-  Link2,
+  Navigation,
   Shield,
+  Map as MapIcon
 } from "lucide-react";
 import type { ClubInfo } from "./MapView";
+import Link from "next/link";
+
+type NearbyClub = {
+  name: string;
+  slug: string;
+  crestUrl: string | null;
+  distance_km: number;
+};
 
 type ClubDetail = {
   club_id: string;
@@ -25,41 +33,24 @@ type ClubDetail = {
   city?: string;
   league?: string;
   stadium?: string;
-  stadium_capacity?: number;
-  capacity?: number;
-  estadio_capacidad?: number;
-  capacidad_estadio?: number;
   stadiumCapacity?: number;
+  badgeUrl?: string;
   honours?: { title: string; count?: number; years?: number[] }[];
-  images?: { url: string; caption?: string }[];
   short_history?: string;
-  links?: { label: string; url: string }[];
+  nearby?: NearbyClub[];
 };
 
-function IconBox({ children }: { children: React.ReactNode }) {
-  return (
-    <span className="w-9 h-9 rounded-xl bg-gray-900/5 border border-black/5 flex items-center justify-center flex-shrink-0 text-gray-600">
-      {children}
-    </span>
-  );
-}
-
-function Row({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value?: React.ReactNode;
-}) {
-  if (value == null || value === "") return null;
+// --- Componentes UI adaptados a la imagen de referencia ---
+function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value?: React.ReactNode }) {
+  if (!value || value === "") return null;
   return (
     <div className="flex items-start gap-3">
-      <IconBox>{icon}</IconBox>
-      <div className="min-w-0 pt-1">
-        <div className="text-xs text-gray-500 leading-none mb-0.5">{label}</div>
-        <div className="text-sm font-medium text-gray-900 whitespace-normal break-words leading-snug">
+      <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center flex-shrink-0 text-gray-700">
+        {icon}
+      </div>
+      <div className="min-w-0 pt-0.5">
+        <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-0.5 font-medium">{label}</div>
+        <div className="text-sm font-semibold text-gray-900 whitespace-normal break-words leading-snug">
           {value}
         </div>
       </div>
@@ -67,29 +58,7 @@ function Row({
   );
 }
 
-function Section({
-  title,
-  icon,
-  children,
-}: {
-  title: string;
-  icon: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="rounded-2xl border border-black/10 bg-white p-4">
-      <div className="flex items-center gap-2 mb-4">
-        <span className="w-8 h-8 rounded-xl bg-gray-900 text-white flex items-center justify-center flex-shrink-0">
-          {icon}
-        </span>
-        <div className="text-xs uppercase tracking-widest text-gray-700 font-semibold">
-          {title}
-        </div>
-      </div>
-      {children}
-    </section>
-  );
-}
+type TabType = "info" | "historia" | "palmares";
 
 export default function ClubDrawer({
   open,
@@ -102,209 +71,251 @@ export default function ClubDrawer({
 }) {
   const [data, setData] = useState<ClubDetail | null>(null);
   const [loading, setLoading] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabType>("info");
 
+  // Fetch de datos
   useEffect(() => {
     if (!open || !club?.clubId) return;
+    
     setLoading(true);
     setData(null);
+    setActiveTab("info"); // Reseteamos a la primera pestaña siempre que abrimos un club nuevo
+
     fetch(`/api/clubs/${encodeURIComponent(club.clubId)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => setData(j))
       .finally(() => setLoading(false));
   }, [open, club?.clubId]);
 
+  // Manejo de la URL silenciosa para SEO y Compartir
+  useEffect(() => {
+    if (open && club?.clubId) {
+      window.history.pushState(null, "", `/club/${club.clubId}`);
+    } else if (!open && club) {
+      window.history.pushState(null, "", "/");
+    }
+  }, [open, club?.clubId]);
+
   const capacity = useMemo(() => {
     if (!data) return undefined;
-    return (
-      data.stadium_capacity ??
-      data.capacity ??
-      data.estadio_capacidad ??
-      data.capacidad_estadio ??
-      data.stadiumCapacity
-    );
+    return data.stadiumCapacity;
   }, [data]);
 
   if (!open || !club) return null;
 
-  const title = club.fullName || club.name || club.clubId || "Club";
+  const title = data?.full_name || data?.name || club.fullName || club.name || "Club";
   const downloadName = `${club.clubId ?? "escudo"}.webp`;
+  const finalBadgeUrl = data?.badgeUrl || club.badgeUrl;
+
+  const hasHistory = !!data?.short_history;
+  const hasHonours = !!data?.honours && data.honours.length > 0;
 
   return (
-    <div className="fixed inset-0 z-40">
+    <div className="fixed inset-0 z-40 pointer-events-none">
       <button
-        className="absolute inset-0 bg-black/30"
+        className="absolute inset-0 bg-black/30 pointer-events-auto"
         onClick={onClose}
         aria-label="Cerrar"
       />
 
-    <aside className="
-      absolute bottom-0 left-0 right-0 rounded-t-3xl
-      sm:bottom-auto sm:top-0 sm:left-auto sm:right-0 sm:rounded-none sm:rounded-l-none
-      h-[90vh] sm:h-full
-      w-full sm:w-[460px]
-      bg-gray-50 shadow-2xl border-t sm:border-t-0 sm:border-l border-black/10
-      flex flex-col
-    ">
-      {/* Handle visual solo en mobile */}
-      <div className="flex justify-center pt-3 pb-1 sm:hidden">
-        <div className="w-10 h-1 rounded-full bg-gray-300" />
-      </div>
+      <aside className="
+        absolute bottom-0 left-0 right-0 rounded-t-3xl pointer-events-auto
+        sm:bottom-auto sm:top-0 sm:left-auto sm:right-0 sm:rounded-none sm:rounded-l-none
+        h-[90vh] sm:h-full
+        w-full sm:w-[460px]
+        bg-white shadow-2xl border-t sm:border-t-0 sm:border-l border-black/10
+        flex flex-col
+      ">
+        {/* Handle visual mobile */}
+        <div className="flex justify-center pt-3 pb-1 sm:hidden">
+          <div className="w-10 h-1 rounded-full bg-gray-300" />
+        </div>
 
-      {/* Header */}
-      <div className="px-3 py-2 border-b border-black/10 bg-white flex items-center justify-end min-h-[52px] pt-14 sm:pt-2">
-        <button
-          onClick={onClose}
-          type="button"
-          className="w-10 h-10 rounded-xl bg-gray-900 text-white flex items-center justify-center flex-shrink-0"
-          aria-label="Cerrar"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-            <path d="M18 6L6 18M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
+        {/* Header Superior */}
+        <div className="px-4 py-2 flex items-center justify-between pt-10 sm:pt-4">
+          <div className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
+            Ficha del Club
+          </div>
+          <button
+            onClick={onClose}
+            type="button"
+            className="w-10 h-10 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-gray-200 transition-colors"
+          >
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+              <path d="M18 6L6 18M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
 
-        {/* Contenido */}
-        <div className="flex-1 overflow-auto p-4 space-y-4">
-
-          {/* Hero */}
-          <div className="rounded-3xl bg-white border border-black/10 p-5">
-            <div className="flex flex-col items-center text-center">
-              {club.badgeUrl ? (
-                <img
-                  src={club.badgeUrl}
-                  alt={`Escudo de ${club.name}`}
-                  className="w-36 h-36 sm:w-44 sm:h-44 object-contain"
-                  loading="eager"
-                  decoding="async"
-                />
-              ) : (
-                <div className="w-36 h-36 rounded-3xl bg-gray-100 flex items-center justify-center text-gray-300">
-                  <Shield size={48} strokeWidth={1.5} />
-                </div>
-              )}
-
-              <div className="mt-4 text-xl font-extrabold text-gray-900 leading-tight">
-                {title}
+        <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col">
+          {/* Hero Section */}
+          <div className="px-6 pb-6 pt-2 flex flex-col items-center text-center">
+            {finalBadgeUrl ? (
+              <img
+                src={finalBadgeUrl}
+                alt={`Escudo de ${club.name}`}
+                className="w-32 h-32 sm:w-40 sm:h-40 object-contain drop-shadow-sm"
+                loading="eager"
+                onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+              />
+            ) : (
+              <div className="w-32 h-32 rounded-3xl bg-gray-50 flex items-center justify-center text-gray-300">
+                <Shield size={48} strokeWidth={1.5} />
               </div>
+            )}
 
-              {club.badgeUrl && (
-                <a
-                  href={club.badgeUrl}
-                  download={downloadName}
-                  className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-gray-900 text-white text-sm font-medium hover:bg-gray-700 transition-colors"
-                >
-                  <Download size={15} />
-                  Descargar escudo
-                </a>
-              )}
+            <div className="mt-4 text-2xl font-extrabold text-gray-900 leading-tight">
+              {title}
+            </div>
+
+            <div className="mt-4 flex gap-2 justify-center w-full">
+              <a
+                href={finalBadgeUrl}
+                download={downloadName}
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-gray-100 text-gray-900 text-sm font-semibold hover:bg-gray-200 transition-colors"
+              >
+                <Download size={16} />
+                Descargar escudo
+              </a>
             </div>
           </div>
 
-          {/* Datos */}
-          <Section title="Datos" icon={<Shield size={15} />}>
-            <div className="space-y-3">
-              <Row icon={<MapPin size={15} />}    label="Ciudad"    value={club.city || undefined} />
-              <Row icon={<Globe size={15} />}      label="Liga"      value={club.league || undefined} />
-              {data?.founded && (
-                <Row icon={<Calendar size={15} />} label="Fundación" value={data.founded} />
-              )}
-              {data?.nickname && (
-                <Row
-                  icon={<Tag size={15} />}
-                  label="Apodo"
-                  value={Array.isArray(data.nickname) ? data.nickname.join(", ") : data.nickname}
-                />
-              )}
-              {data?.stadium && (
-                <Row
-                  icon={<Trophy size={15} />}
-                  label="Estadio"
-                  value={
-                    capacity
-                      ? `${data.stadium} · ${capacity.toLocaleString("es-AR")} espectadores`
-                      : data.stadium
-                  }
-                />
-              )}
-            </div>
-          </Section>
+          {/* Sistema de Pestañas Dinámicas */}
+          <div className="flex border-b border-gray-200 px-2">
+            <button 
+              onClick={() => setActiveTab("info")}
+              className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 ${activeTab === "info" ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+            >
+              Información
+            </button>
+            {hasHistory && (
+              <button 
+                onClick={() => setActiveTab("historia")}
+                className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 ${activeTab === "historia" ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              >
+                Historia
+              </button>
+            )}
+            {hasHonours && (
+              <button 
+                onClick={() => setActiveTab("palmares")}
+                className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 ${activeTab === "palmares" ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500 hover:text-gray-700"}`}
+              >
+                Palmarés
+              </button>
+            )}
+          </div>
 
-          {/* Historia */}
-          {data?.short_history && (
-            <Section title="Historia" icon={<Clock size={15} />}>
-              <p className="text-sm text-gray-700 leading-relaxed">{data.short_history}</p>
-            </Section>
-          )}
+          {/* Contenedor de Contenido según Pestaña */}
+          <div className="p-4 flex-1 bg-white">
+            
+            {loading ? (
+              <div className="py-10 flex flex-col items-center justify-center gap-3 text-gray-400">
+                <span className="w-6 h-6 rounded-full border-2 border-gray-200 border-t-gray-800 animate-spin"></span>
+                <span className="text-sm font-medium">Cargando datos...</span>
+              </div>
+            ) : (
+              <>
+                {/* PESTAÑA: INFORMACIÓN */}
+                {activeTab === "info" && (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    
+                    {/* Caja de Datos Generales idéntica a la imagen */}
+                    <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+                      <div className="flex items-center gap-2 mb-5 text-[11px] font-bold text-gray-600 uppercase tracking-widest">
+                        <Shield size={16} className="text-gray-900" /> Datos Generales
+                      </div>
+                      
+                      <div className="space-y-4">
+                        <InfoRow icon={<MapPin size={18} />} label="Ciudad" value={data?.city ? `${data.city}, ${data.province}` : undefined} />
+                        <InfoRow icon={<Trophy size={18} />} label="Liga" value={data?.league} />
+                        {data?.founded && (
+                          <InfoRow icon={<Calendar size={18} />} label="Fundación" value={data.founded} />
+                        )}
+                        {data?.stadium && (
+                          <InfoRow icon={<MapIcon size={18} />} label="Estadio" value={capacity ? `${data.stadium} (${capacity.toLocaleString("es-AR")})` : data.stadium} />
+                        )}
+                        {data?.nickname && (
+                          <InfoRow icon={<Tag size={18} />} label="Apodo" value={Array.isArray(data.nickname) ? data.nickname.join(", ") : data.nickname} />
+                        )}
+                      </div>
+                    </div>
 
-          {/* Palmarés */}
-          {data?.honours && data.honours.length > 0 && (
-            <Section title="Palmarés" icon={<Trophy size={15} />}>
-              <ul className="space-y-1.5">
-                {data.honours.map((h, i) => (
-                  <li key={i} className="text-sm text-gray-800 flex items-start gap-2">
-                    <span className="text-gray-400 mt-0.5">·</span>
-                    <span>
-                      <span className="font-medium">{h.title}</span>
-                      {h.count != null && (
-                        <span className="text-gray-500 ml-1">({h.count}×)</span>
-                      )}
-                      {h.years && h.years.length > 0 && (
-                        <span className="text-gray-400 ml-1 text-xs">{h.years.join(", ")}</span>
-                      )}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </Section>
-          )}
-
-          {/* Galería */}
-          {data?.images && data.images.length > 0 && (
-            <Section title="Galería" icon={<Images size={15} />}>
-              <div className="grid grid-cols-2 gap-2">
-                {data.images.map((img, i) => (
-                  <div key={i} className="rounded-xl overflow-hidden bg-gray-100">
-                    <img
-                      src={img.url}
-                      alt={img.caption ?? ""}
-                      className="w-full h-32 object-cover"
-                      loading="lazy"
-                    />
-                    {img.caption && (
-                      <div className="px-2 py-1 text-xs text-gray-500">{img.caption}</div>
+                    {/* Clubes Cercanos (Solo si hay y si estamos en Info) */}
+                    {data?.nearby && data.nearby.length > 0 && (
+                      <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+                        <div className="flex items-center gap-2 mb-4 text-[11px] font-bold text-gray-600 uppercase tracking-widest">
+                          <Navigation size={16} className="text-gray-900" /> Clubes Cercanos
+                        </div>
+                        <div className="flex flex-col gap-1">
+                          {data.nearby.map((c, i) => (
+                            <Link 
+                              key={i} 
+                              href={`/club/${c.slug}`}
+                              className="flex items-center justify-between p-2 rounded-xl hover:bg-white border border-transparent hover:border-gray-200 transition-all cursor-pointer group"
+                            >
+                              <div className="flex items-center gap-3">
+                                <img 
+                                  src={c.crestUrl || `/badges/${c.slug}.webp`} 
+                                  alt="" 
+                                  className="w-8 h-8 object-contain drop-shadow-sm"
+                                  onError={(e) => { (e.target as HTMLImageElement).style.visibility = "hidden" }}
+                                />
+                                <span className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">{c.name}</span>
+                              </div>
+                              <span className="text-[11px] font-bold text-gray-500 bg-gray-200/50 px-2 py-1 rounded-md">
+                                {c.distance_km} km
+                              </span>
+                            </Link>
+                          ))}
+                        </div>
+                      </div>
                     )}
                   </div>
-                ))}
-              </div>
-            </Section>
-          )}
+                )}
 
-          {/* Enlaces */}
-          {data?.links && data.links.length > 0 && (
-            <Section title="Enlaces" icon={<Link2 size={15} />}>
-              <div className="flex flex-wrap gap-2">
-                {data.links.map((l, i) => (
-                  <a
-                    key={i}
-                    href={l.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-gray-800 bg-gray-100 border border-black/10 rounded-lg px-3 py-1.5 hover:bg-gray-200 transition-colors"
-                  >
-                    {l.label}
-                  </a>
-                ))}
-              </div>
-            </Section>
-          )}
+                {/* PESTAÑA: HISTORIA */}
+                {activeTab === "historia" && data?.short_history && (
+                  <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="flex items-center gap-2 mb-4 text-[11px] font-bold text-gray-600 uppercase tracking-widest">
+                      <Clock size={16} className="text-gray-900" /> Reseña Histórica
+                    </div>
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-medium">
+                      {data.short_history}
+                    </p>
+                  </div>
+                )}
 
-          {loading && (
-            <div className="rounded-2xl bg-white border border-black/10 p-4 text-sm text-gray-500 text-center">
-              Cargando datos adicionales…
-            </div>
-          )}
-
+                {/* PESTAÑA: PALMARÉS */}
+                {activeTab === "palmares" && data?.honours && (
+                  <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                    <div className="flex items-center gap-2 mb-5 text-[11px] font-bold text-gray-600 uppercase tracking-widest">
+                      <Trophy size={16} className="text-gray-900" /> Títulos Obtenidos
+                    </div>
+                    <ul className="space-y-3">
+                      {data.honours.map((h, i) => (
+                        <li key={i} className="flex items-start gap-3 bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
+                          <div className="w-8 h-8 rounded-full bg-yellow-100 text-yellow-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                            <Trophy size={14} />
+                          </div>
+                          <div>
+                            <div className="font-bold text-gray-900 text-sm">
+                              {h.title} {h.count != null && <span className="text-blue-600 ml-1">({h.count})</span>}
+                            </div>
+                            {h.years && h.years.length > 0 && (
+                              <div className="text-xs font-medium text-gray-500 mt-0.5 leading-relaxed">
+                                {h.years.join(", ")}
+                              </div>
+                            )}
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
         </div>
       </aside>
     </div>
