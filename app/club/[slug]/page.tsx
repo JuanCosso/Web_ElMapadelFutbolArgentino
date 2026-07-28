@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
 import {prisma} from "@/lib/prisma";
+import { getClubLocation } from "@/app/actions/admin";
 import Link from "next/link";
 import { ClubCrest } from "@/components/club/ClubCrest";
 
@@ -30,13 +31,26 @@ export default async function ClubPage({ params }: { params: Promise<{ slug: str
     }
   });
 
-  if (!club) notFound();
+  if (!club) return <div>Club no encontrado</div>;
+
+  const loc = await getClubLocation(club.id);
+
+  const hasCoordinates = loc?.lat != null && loc?.lng != null;
+
+  const mapUrl = hasCoordinates 
+    ? `/?lat=${loc.lat}&lng=${loc.lng}` 
+    : `/`;
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       {/* Navbar Simple */}
       <header className="bg-gray-900 text-white p-4 flex justify-between items-center">
-        <Link href="/" className="font-bold">⬅ Volver al Mapa</Link>
+        <Link 
+          href={mapUrl} 
+          className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition-colors"
+        >
+          Volver al mapa
+        </Link>
         <span className="text-sm">El Mapa del Fútbol Argentino</span>
       </header>
 

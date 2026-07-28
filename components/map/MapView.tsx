@@ -66,6 +66,7 @@ export default function MapView({
   onMapApiReady?: (api: {
     flyTo: (center: [number, number], zoom?: number) => void;
     fitBBox: (bbox: [number, number, number, number]) => void;
+    clearFilter: () => void;
   } | null) => void;
 }) {
   const divRef = useRef<HTMLDivElement | null>(null);
@@ -129,6 +130,7 @@ export default function MapView({
           { padding: { top: 30, bottom: 30, left: 30, right: 30 }, duration: 450, maxZoom: 10 }
         );
       },
+      clearFilter: () => clearProvinceSelection(),
     });
 
     const PROV_EXPR: ExpressionSpecification = [

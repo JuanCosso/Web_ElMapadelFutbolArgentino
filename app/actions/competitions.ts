@@ -1,8 +1,7 @@
 "use server";
 
 import { prisma } from "@/lib/prisma";
-
-export type CompetitionType = "LEAGUE" | "CUP" | "TOURNAMENT";
+import { CompetitionType } from "@prisma/client";
 
 export type CompetitionItem = {
   id: string;
@@ -31,6 +30,17 @@ export type LocalLeagueItem = {
   _count?: { clubs: number };
 };
 
+export interface UpsertCompetitionInput {
+  id?: string | null;
+  name: string;
+  slug?: string;
+  type: CompetitionType;
+  level?: number | null;
+  parentId?: string | null;
+  foundation?: string | null;
+  logoUrl?: string | null;
+}
+
 export async function getCompetitions(): Promise<CompetitionItem[]> {
   try {
     const competitions = await prisma.competition.findMany({
@@ -47,20 +57,11 @@ export async function getCompetitions(): Promise<CompetitionItem[]> {
   }
 }
 
-export async function upsertCompetition(data: {
-  id?: string | null;
-  name: string;
-  slug?: string;
-  type: CompetitionType;
-  level?: number | null;
-  parentId?: string | null;
-  logoUrl?: string | null;
-  foundation?: string | null;
-}) {
+export async function upsertCompetition(data: UpsertCompetitionInput) {
   try {
-    const name = data.name.trim();
+    const name = data.name?.trim();
     if (!name) {
-      return { error: "El nombre de la competencia es obligatorio" };
+      return { error: "El nombre de la competencia es obligatorio." };
     }
 
     const slug =
@@ -72,14 +73,42 @@ export async function upsertCompetition(data: {
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-+|-+$/g, "");
 
+    if (!slug) return { error: "El slug identificador no puede estar vacío." };
+
+    const parentId =
+      data.parentId && data.parentId.trim() !== "" && data.parentId.trim() !== "null"
+        ? data.parentId.trim()
+        : null;
+
+    const level =
+      data.level !== undefined && data.level !== null && !isNaN(Number(data.level))
+        ? Number(data.level)
+        : null;
+
+    const existingSlug = await prisma.competition.findUnique({ where: { slug } });
+    if (existingSlug && existingSlug.id !== data.id) {
+      return { error: `Ya existe una competencia con el slug "${slug}".` };
+    }
+
+    if (parentId) {
+      if (data.id && parentId === data.id) {
+        return { error: "Una competencia no puede ser su propio padre." };
+      }
+      const parentExists = await prisma.competition.findUnique({ where: { id: parentId } });
+      if (!parentExists) {
+        return { error: "La competencia padre seleccionada no existe en la base de datos." };
+      }
+    }
+
     const payload = {
       name,
       slug,
       type: data.type,
-      level: data.level !== undefined && data.level !== null && !isNaN(Number(data.level)) ? Number(data.level) : null,
-      parentId: data.parentId || null,
-      logoUrl: data.logoUrl || null,
-      foundation: data.foundation || null,
+      level,
+      parentId, 
+      // 🟢 Forzamos conversión segura a string
+      foundation: data.foundation ? String(data.foundation).trim() : null,
+      logoUrl: data.logoUrl ? String(data.logoUrl).trim() : null,
     };
 
     if (data.id) {
@@ -87,19 +116,22 @@ export async function upsertCompetition(data: {
         where: { id: data.id },
         data: payload,
       });
-      return { success: true, competition: updated };
+      return { success: true, competition: updated }; 
     } else {
       const created = await prisma.competition.create({
         data: payload,
       });
       return { success: true, competition: created };
     }
-  } catch (error: unknown) {
-    const err = error as { code?: string; message?: string };
-    if (err.code === "P2002") {
-      return { error: "Ya existe una competencia con este slug/identificador." };
+  } catch (error: any) {
+    console.error("Error al guardar competencia en Prisma:", error);
+    if (error.code === "P2002") {
+      return { error: "Ya existe un registro con ese slug único." };
     }
-    return { error: err.message || "Error al guardar la competencia." };
+    if (error.code === "P2003") {
+      return { error: "El ID del padre no existe en la base de datos." };
+    }
+    return { error: error.message || "Error al guardar la competencia." };
   }
 }
 
@@ -114,8 +146,6 @@ export async function deleteCompetition(id: string) {
     return { error: err.message || "No se pudo eliminar la competencia." };
   }
 }
-
-// --- Regional / Local Leagues ---
 
 export async function getLocalLeagues(): Promise<LocalLeagueItem[]> {
   try {
@@ -165,8 +195,8 @@ export async function upsertLocalLeague(data: {
       provinceId: data.provinceId,
       localityId: data.localityId || null,
       organizer: data.organizer || null,
-      logoUrl: data.logoUrl || null,
-      foundation: data.foundation || null,
+      logoUrl: data.logoUrl ? String(data.logoUrl).trim() : null,
+      foundation: data.foundation ? String(data.foundation).trim() : null,
     };
 
     if (data.id) {

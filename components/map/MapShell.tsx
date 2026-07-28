@@ -10,6 +10,7 @@ import MapLayerControl from "./MapLayerControl";
 import SearchBar from "./SearchBar";
 import { buildSearchIndex, ClubFeature } from "@/utils/searchIndex";
 import type { SearchItem } from "@/utils/searchIndex";
+import { useSearchParams } from 'next/navigation';
 
 type FeatureCollection = { type: "FeatureCollection"; features: ClubFeature[] };
 
@@ -33,6 +34,7 @@ export default function MapShell() {
   const [mapApi, setMapApi] = useState<{
     flyTo: (center: [number, number], zoom?: number) => void;
     fitBBox: (bbox: [number, number, number, number]) => void;
+    clearFilter: () => void;
   } | null>(null);
 
   const [provinceInfo, setProvinceInfo] = useState<ProvinceInfo | null>(null);
@@ -54,6 +56,7 @@ export default function MapShell() {
   const closeClub = () => {
     setSelectedClub(null);
     setDrawerOpen(false);
+    window.history.pushState(null, '', '/');
   };
 
   // El panel muestra hover si existe, si no el seleccionado
@@ -61,6 +64,7 @@ export default function MapShell() {
 
   const onSearchSelect = (item: SearchItem) => {
     if (!mapApi) return;
+    mapApi.clearFilter();
     if (item.type === "club") {
       mapApi.flyTo(item.center, 13);
       openClub({
@@ -72,6 +76,24 @@ export default function MapShell() {
         league: item.league ?? "",
         badgeUrl: item.badge_url,
       });
+      const searchParams = useSearchParams();
+      useEffect(() => {
+        // Si la API del mapa no cargó todavía, esperamos
+        if (!mapApi) return;
+      
+        // Buscamos si la URL trajo coordenadas
+        const lat = searchParams.get('lat');
+        const lng = searchParams.get('lng');
+      
+        if (lat && lng) {
+          // Hacemos el vuelo hacia el club (14 es un zoom ideal para ver la zona)
+          mapApi.flyTo([parseFloat(lng), parseFloat(lat)], 14);
+
+          // Limpiamos la URL sin recargar la página para borrar el "?lat=...&lng=..."
+          // Así mantenemos la barra de direcciones limpia
+          window.history.replaceState(null, '', '/');
+        }
+      }, [mapApi, searchParams]);
       return;
     }
     mapApi.fitBBox(item.bbox);

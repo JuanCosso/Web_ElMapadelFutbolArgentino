@@ -11,8 +11,8 @@ import {
   deleteLocalLeague,
   CompetitionItem,
   LocalLeagueItem,
-  CompetitionType,
 } from "@/app/actions/competitions";
+import { CompetitionType } from "@prisma/client";
 import { getAdminFormData } from "@/app/actions/admin";
 
 function slugify(s: string) {
@@ -52,23 +52,19 @@ async function imageFileToWebp256(file: File): Promise<string> {
 export default function CompetitionsAdminPage() {
   const [activeTab, setActiveTab] = useState<"COMPETITIONS" | "REGIONAL_LEAGUES">("COMPETITIONS");
 
-  // Global Competitions Data
   const [competitions, setCompetitions] = useState<CompetitionItem[]>([]);
-  // Regional Leagues Data
   const [localLeagues, setLocalLeagues] = useState<LocalLeagueItem[]>([]);
-  // Provinces & Localities
   const [provinces, setProvinces] = useState<{ id: string; name: string }[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Competition Form State
   const [compMode, setCompMode] = useState<"IDLE" | "CREATE" | "EDIT">("IDLE");
   const [compEditingId, setCompEditingId] = useState<string | null>(null);
   const [compName, setCompName] = useState("");
   const [compManualSlug, setCompManualSlug] = useState("");
   const [compType, setCompType] = useState<CompetitionType>("LEAGUE");
-  const [compLevel, setCompLevel] = useState<string>("1");
+  const [compLevel, setCompLevel] = useState<string>(""); // 🟢 Empezamos vacío por defecto
   const [compParentId, setCompParentId] = useState<string>("");
   const [compFoundation, setCompFoundation] = useState<string>("");
   const [compLogoUrl, setCompLogoUrl] = useState<string>("");
@@ -76,7 +72,6 @@ export default function CompetitionsAdminPage() {
   const [compLogoFileName, setCompLogoFileName] = useState("");
   const compFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Regional League Form State
   const [leagueMode, setLeagueMode] = useState<"IDLE" | "CREATE" | "EDIT">("IDLE");
   const [leagueEditingId, setLeagueEditingId] = useState<string | null>(null);
   const [leagueName, setLeagueName] = useState("");
@@ -125,20 +120,18 @@ export default function CompetitionsAdminPage() {
     };
   }, []);
 
-  // --- Auto Slugs ---
   const compAutoSlug = slugify(compName);
   const compFinalSlug = compManualSlug.trim() || compAutoSlug;
 
   const leagueAutoSlug = slugify(leagueName);
   const leagueFinalSlug = leagueManualSlug.trim() || leagueAutoSlug;
 
-  // Resets
   const resetCompForm = () => {
     setCompEditingId(null);
     setCompName("");
     setCompManualSlug("");
     setCompType("LEAGUE");
-    setCompLevel("1");
+    setCompLevel("");
     setCompParentId("");
     setCompFoundation("");
     setCompLogoUrl("");
@@ -160,14 +153,13 @@ export default function CompetitionsAdminPage() {
     setStatus({ type: "idle", msg: "" });
   };
 
-  // Competition Handlers
   const handleEditComp = (c: CompetitionItem) => {
     resetCompForm();
     setCompEditingId(c.id);
     setCompName(c.name);
     setCompManualSlug(c.slug);
     setCompType(c.type);
-    setCompLevel(c.level !== null && c.level !== undefined ? String(c.level) : "1");
+    setCompLevel(c.level !== null && c.level !== undefined ? String(c.level) : "");
     setCompParentId(c.parentId || "");
     setCompFoundation(c.foundation || "");
     setCompLogoUrl(c.logoUrl || "");
@@ -195,6 +187,7 @@ export default function CompetitionsAdminPage() {
 
   const handleSubmitComp = async (e: React.FormEvent) => {
     e.preventDefault();
+
     if (!compName.trim()) {
       setStatus({ type: "error", msg: "El nombre de la competencia es obligatorio" });
       return;
@@ -205,15 +198,21 @@ export default function CompetitionsAdminPage() {
 
     try {
       let finalLogo = compLogoUrl;
+
       if (compLogoData) {
-        const uploadRes = await fetch("/api/upload-logo", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ key: compFinalSlug, folder: "competitions", data: compLogoData }),
-        });
-        const uploadJson = await uploadRes.json();
-        if (!uploadRes.ok) throw new Error(uploadJson.error);
-        finalLogo = uploadJson.logo_url;
+        try {
+          const uploadRes = await fetch("/api/upload-logo", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ key: compFinalSlug, folder: "competitions", data: compLogoData }),
+          });
+          if (uploadRes.ok) {
+            const uploadJson = await uploadRes.json();
+            finalLogo = uploadJson.logo_url;
+          }
+        } catch (uploadErr) {
+          console.warn("Error en subida de logo, continuando con la URL existente:", uploadErr);
+        }
       }
 
       const res = await upsertCompetition({
@@ -221,8 +220,9 @@ export default function CompetitionsAdminPage() {
         name: compName,
         slug: compFinalSlug,
         type: compType,
-        level: compLevel ? parseInt(compLevel, 10) : null,
-        parentId: compParentId || null,
+        // 🟢 Solo mandamos parseInt si hay valor, sino null (ideal para organizaciones)
+        level: compLevel && compLevel.trim() !== "" && !isNaN(Number(compLevel)) ? parseInt(compLevel, 10) : null,
+        parentId: compParentId && compParentId.trim() !== "" ? compParentId.trim() : null,
         foundation: compFoundation || null,
         logoUrl: finalLogo || null,
       });
@@ -234,15 +234,13 @@ export default function CompetitionsAdminPage() {
         await refreshAllData();
         if (compMode === "CREATE") resetCompForm();
       }
-    } catch (err: unknown) {
-      const e = err as Error;
-      setStatus({ type: "error", msg: e.message });
+    } catch (err: any) {
+      setStatus({ type: "error", msg: err.message || "Error de conexión" });
     } finally {
       setSaving(false);
     }
   };
 
-  // Regional League Handlers
   const handleEditLeague = (l: LocalLeagueItem) => {
     resetLeagueForm();
     setLeagueEditingId(l.id);
@@ -322,7 +320,6 @@ export default function CompetitionsAdminPage() {
     }
   };
 
-  // Filtered lists
   const filteredCompetitions = competitions.filter(
     (c) =>
       c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -348,7 +345,6 @@ export default function CompetitionsAdminPage() {
           </p>
         </div>
 
-        {/* Guía Estructurada de Jerarquías */}
         <div style={s.guideBox}>
           <div style={s.guideTitle}>🏆 Jerarquía Oficial de Niveles para el Mapa de Fútbol</div>
           <div style={s.guideGrid}>
@@ -363,7 +359,6 @@ export default function CompetitionsAdminPage() {
           </div>
         </div>
 
-        {/* Pestañas de Navegación */}
         <div style={s.tabsWrap}>
           <button
             onClick={() => {
@@ -387,7 +382,6 @@ export default function CompetitionsAdminPage() {
           </button>
         </div>
 
-        {/* ----------------- TAB 1: TORNEOS Y COMPETENCIAS ----------------- */}
         {activeTab === "COMPETITIONS" && (
           <>
             {compMode === "IDLE" && (
@@ -459,20 +453,24 @@ export default function CompetitionsAdminPage() {
                                 style={{
                                   ...s.typeBadge,
                                   backgroundColor:
-                                    c.type === "CUP"
+                                    c.type === "ORGANIZATION"
+                                      ? "#dcfce7"
+                                      : c.type === "CUP"
                                       ? "#fef3c7"
                                       : c.type === "LEAGUE"
                                       ? "#e0f2fe"
                                       : "#f3e8ff",
                                   color:
-                                    c.type === "CUP"
+                                    c.type === "ORGANIZATION"
+                                      ? "#166534"
+                                      : c.type === "CUP"
                                       ? "#92400e"
                                       : c.type === "LEAGUE"
                                       ? "#075985"
                                       : "#6b21a8",
                                 }}
                               >
-                                {c.type === "CUP" ? "COPA" : c.type === "LEAGUE" ? "LIGA" : "TORNEO"}
+                                {c.type === "ORGANIZATION" ? "FEDERACIÓN" : c.type === "CUP" ? "COPA" : c.type === "LEAGUE" ? "LIGA" : "TORNEO"}
                               </span>
                             </td>
                             <td style={s.td}>
@@ -500,12 +498,11 @@ export default function CompetitionsAdminPage() {
               </div>
             )}
 
-            {/* Formulario Competencia */}
             {compMode !== "IDLE" && (
               <form onSubmit={handleSubmitComp} style={s.form}>
                 <div style={s.formHeader}>
                   <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: "#0f172a" }}>
-                    {compMode === "CREATE" ? "Crear Nueva Competencia" : `Editando: ${compName}`}
+                    {compMode === "CREATE" ? "Crear Nueva Competencia / Ente" : `Editando: ${compName}`}
                   </h3>
                   <button type="button" onClick={() => setCompMode("IDLE")} style={s.btnSecondary}>
                     Volver a la lista
@@ -516,10 +513,10 @@ export default function CompetitionsAdminPage() {
                   <h4 style={s.sectionTitle}>Información Principal</h4>
                   <div style={s.grid2}>
                     <div style={s.field}>
-                      <label style={s.label}>Nombre de la Competencia *</label>
+                      <label style={s.label}>Nombre de la Competencia / Ente *</label>
                       <input
                         style={s.input}
-                        placeholder="Ej: Copa Entre Ríos, Copa Libertadores, LPF..."
+                        placeholder="Ej: AFA, Copa Entre Ríos, LPF..."
                         value={compName}
                         onChange={(e) => setCompName(e.target.value)}
                       />
@@ -541,12 +538,13 @@ export default function CompetitionsAdminPage() {
                     </div>
 
                     <div style={s.field}>
-                      <label style={s.label}>Tipo de Formato</label>
+                      <label style={s.label}>Tipo de Formato / Organización</label>
                       <select
                         style={s.select}
                         value={compType}
                         onChange={(e) => setCompType(e.target.value as CompetitionType)}
                       >
+                        <option value="ORGANIZATION">ENTE / FEDERACIÓN (Ej: AFA, Conmebol, Consejo Federal)</option>
                         <option value="LEAGUE">LIGA (Liga / Torneo largo o de puntos)</option>
                         <option value="CUP">COPA (Copa de eliminación directa o mixta)</option>
                         <option value="TOURNAMENT">TORNEO (Torneo corto / Zonal / Regional)</option>
@@ -554,19 +552,20 @@ export default function CompetitionsAdminPage() {
                     </div>
 
                     <div style={s.field}>
-                      <label style={s.label}>Nivel de Jerarquía Oficial *</label>
+                      <label style={s.label}>Nivel de Jerarquía Oficial</label>
                       <select
                         style={s.select}
                         value={compLevel}
                         onChange={(e) => setCompLevel(e.target.value)}
                       >
+                        <option value="">-- Sin nivel (Ideal para Entes / Federaciones) --</option>
                         <option value="1">1 - Internacional (Copa Libertadores, Copa Sudamericana)</option>
                         <option value="2">2 - Primera División (Liga Profesional AFA - LPF)</option>
                         <option value="3">3 - Segunda División (Primera Nacional, Copa Argentina)</option>
                         <option value="4">4 - Tercera División (Torneo Federal A, Primera B Metro)</option>
                         <option value="5">5 - Cuarta División (Torneo Regional Federal Amateur, Primera C)</option>
                         <option value="6">6 - Quinta División (Torneo Promocional Amateur)</option>
-                        <option value="7">7 - Sexta División (Copas Provinciales: Copa Santa Fe, Copa Entre Ríos, etc.)</option>
+                        <option value="7">7 - Sexta División (Copas Provinciales: Copa Santa Fe, Copa Entre Ríos)</option>
                         <option value="8">8 - Séptima División (Ligas Regionales y Locales)</option>
                       </select>
                     </div>
@@ -575,7 +574,7 @@ export default function CompetitionsAdminPage() {
                       <label style={s.label}>Año o Fecha de Fundación / Creación</label>
                       <input
                         style={s.input}
-                        placeholder="Ej: 1960, 2017..."
+                        placeholder="Ej: 13 de marzo de 1890, 2017..."
                         value={compFoundation}
                         onChange={(e) => setCompFoundation(e.target.value)}
                       />
@@ -598,7 +597,7 @@ export default function CompetitionsAdminPage() {
                           .filter((c) => c.id !== compEditingId)
                           .map((c) => (
                             <option key={c.id} value={c.id}>
-                              {c.name} (Nivel {c.level ?? "-"})
+                              {c.name} {c.level ? `(Nivel ${c.level})` : "(Federación)"}
                             </option>
                           ))}
                       </select>
@@ -610,9 +609,7 @@ export default function CompetitionsAdminPage() {
                       </div>
                       <div style={{ fontSize: 12, color: "#1e3a8a", lineHeight: 1.4 }}>
                         Es la organización o torneo superior que reglamenta o da marco a esta competencia.
-                        Por ejemplo, <strong>CONMEBOL</strong> es el ente padre de la <i>Copa Libertadores</i>,
-                        o <strong>AFA</strong> es el ente padre de la <i>Liga Profesional</i>. En el ámbito provincial,
-                        la <strong>Federación Entrerriana</strong> es el ente de la <i>Copa Entre Ríos</i>.
+                        Por ejemplo, podés crear la <strong>AFA</strong> como Federación (sin padre) y luego crear la <i>Liga Profesional</i> asignándole a la AFA como padre.
                       </div>
                     </div>
                   </div>
@@ -670,7 +667,7 @@ export default function CompetitionsAdminPage() {
 
                 <div style={{ display: "flex", gap: 10 }}>
                   <button type="submit" style={s.btnPrimary} disabled={saving}>
-                    {saving ? "Guardando..." : "Guardar Competencia"}
+                    {saving ? "Guardando..." : "Guardar Registro"}
                   </button>
                   <button type="button" onClick={() => setCompMode("IDLE")} style={s.btnSecondary}>
                     Cancelar
@@ -770,7 +767,6 @@ export default function CompetitionsAdminPage() {
               </div>
             )}
 
-            {/* Formulario Liga Regional */}
             {leagueMode !== "IDLE" && (
               <form onSubmit={handleSubmitLeague} style={s.form}>
                 <div style={s.formHeader}>

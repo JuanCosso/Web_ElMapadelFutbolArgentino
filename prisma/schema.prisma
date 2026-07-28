@@ -12,6 +12,7 @@ enum CompetitionType {
   LEAGUE
   CUP
   TOURNAMENT
+  ORGANIZATION
 }
 enum SuggestionStatus {
   PENDING
