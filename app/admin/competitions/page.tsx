@@ -9,6 +9,9 @@ import {
   getLocalLeagues,
   upsertLocalLeague,
   deleteLocalLeague,
+  autoMergeDuplicateLocalLeagues,
+  addClubTitleFromAdmin,
+  getClubsByLeagueId,
   CompetitionItem,
   LocalLeagueItem,
 } from "@/app/actions/competitions";
@@ -89,6 +92,54 @@ export default function CompetitionsAdminPage() {
     type: "idle",
     msg: "",
   });
+
+  const [titleModalOpen, setTitleModalOpen] = useState(false);
+  const [selectedLeagueForTitles, setSelectedLeagueForTitles] = useState<LocalLeagueItem | null>(null);
+  const [leagueClubsForTitles, setLeagueClubsForTitles] = useState<{ id: string; fullName: string; shortName: string | null; slug: string; crestUrl: string | null }[]>([]);
+  const [selectedClubForTitle, setSelectedClubForTitle] = useState("");
+  const [titleNameInput, setTitleNameInput] = useState("");
+  const [titleCountInput, setTitleCountInput] = useState(1);
+  const [titleSaving, setTitleSaving] = useState(false);
+
+  const handleOpenTitleModal = async (l: LocalLeagueItem) => {
+    setSelectedLeagueForTitles(l);
+    setTitleNameInput(l.name);
+    setSelectedClubForTitle("");
+    setTitleCountInput(1);
+    setTitleModalOpen(true);
+    const clubs = await getClubsByLeagueId(l.id);
+    setLeagueClubsForTitles(clubs);
+  };
+
+  const handleSaveTitle = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedClubForTitle || !titleNameInput) {
+      alert("Selecciona un club e ingresa el nombre del título.");
+      return;
+    }
+    setTitleSaving(true);
+    const res = await addClubTitleFromAdmin(selectedClubForTitle, titleNameInput, Number(titleCountInput));
+    setTitleSaving(false);
+    if (res.error) {
+      alert(res.error);
+    } else {
+      alert("🏆 ¡Título registrado con éxito en el club!");
+      setTitleModalOpen(false);
+      refreshAllData();
+    }
+  };
+
+  const handleAutoMerge = async () => {
+    if (!confirm("¿Deseas fusionar automáticamente todas las ligas regionales duplicadas? Los clubes se asociarán a la liga principal y los registros sobrantes se eliminarán.")) return;
+    setLoading(true);
+    const res = await autoMergeDuplicateLocalLeagues();
+    setLoading(false);
+    if (res.error) alert(res.error);
+    else {
+      alert(`⚡ ¡Fusionadas ${res.mergedCount} ligas duplicadas con éxito!`);
+      refreshAllData();
+    }
+  };
 
   const refreshAllData = async () => {
     setLoading(true);
@@ -320,18 +371,40 @@ export default function CompetitionsAdminPage() {
     }
   };
 
-  const filteredCompetitions = competitions.filter(
-    (c) =>
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.slug.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const [selectedProvinceFilter, setSelectedProvinceFilter] = useState("");
+  const [selectedTypeFilter, setSelectedTypeFilter] = useState("");
+  const [selectedLevelFilter, setSelectedLevelFilter] = useState("");
+  const [sortBy, setSortBy] = useState<"teams-desc" | "teams-asc" | "name-asc" | "name-desc" | "level-asc" | "level-desc">("level-asc");
 
-  const filteredLeagues = localLeagues.filter(
-    (l) =>
+  const filteredCompetitions = competitions.filter((c) => {
+    const matchesSearch =
+      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.slug.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesType = !selectedTypeFilter || c.type === selectedTypeFilter;
+    const matchesLevel = !selectedLevelFilter || String(c.level) === selectedLevelFilter;
+    return matchesSearch && matchesType && matchesLevel;
+  }).sort((a, b) => {
+    if (sortBy === "teams-desc") return (b._count?.clubs ?? 0) - (a._count?.clubs ?? 0);
+    if (sortBy === "teams-asc") return (a._count?.clubs ?? 0) - (b._count?.clubs ?? 0);
+    if (sortBy === "name-asc") return a.name.localeCompare(b.name);
+    if (sortBy === "name-desc") return b.name.localeCompare(a.name);
+    if (sortBy === "level-desc") return (b.level ?? 0) - (a.level ?? 0);
+    return (a.level ?? 99) - (b.level ?? 99);
+  });
+
+  const filteredLeagues = localLeagues.filter((l) => {
+    const matchesSearch =
       l.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
       l.slug.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (l.province?.name && l.province.name.toLowerCase().includes(searchQuery.toLowerCase()))
-  );
+      (l.province?.name && l.province.name.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesProv = !selectedProvinceFilter || l.provinceId === selectedProvinceFilter || l.province?.name === selectedProvinceFilter;
+    return matchesSearch && matchesProv;
+  }).sort((a, b) => {
+    if (sortBy === "teams-desc") return (b._count?.clubs ?? 0) - (a._count?.clubs ?? 0);
+    if (sortBy === "teams-asc") return (a._count?.clubs ?? 0) - (b._count?.clubs ?? 0);
+    if (sortBy === "name-desc") return b.name.localeCompare(a.name);
+    return a.name.localeCompare(b.name);
+  });
 
   return (
     <div style={s.page}>
@@ -386,13 +459,55 @@ export default function CompetitionsAdminPage() {
           <>
             {compMode === "IDLE" && (
               <div style={s.section}>
-                <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
                   <input
-                    style={{ ...s.input, flex: 1, fontSize: 14, padding: "10px 14px" }}
+                    style={{ ...s.input, flex: 1, minWidth: 200, fontSize: 14, padding: "10px 14px" }}
                     placeholder="Buscar competencia por nombre o slug..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
+
+                  <select
+                    style={{ ...s.select, width: "auto", fontSize: 13, padding: "10px 12px" }}
+                    value={selectedTypeFilter}
+                    onChange={(e) => setSelectedTypeFilter(e.target.value)}
+                  >
+                    <option value="">-- Todos los formatos --</option>
+                    <option value="ORGANIZATION">Entes / Federaciones</option>
+                    <option value="LEAGUE">Ligas</option>
+                    <option value="CUP">Copas</option>
+                    <option value="TOURNAMENT">Torneos</option>
+                  </select>
+
+                  <select
+                    style={{ ...s.select, width: "auto", fontSize: 13, padding: "10px 12px" }}
+                    value={selectedLevelFilter}
+                    onChange={(e) => setSelectedLevelFilter(e.target.value)}
+                  >
+                    <option value="">-- Todos los niveles --</option>
+                    <option value="1">Nivel 1 (Internacional)</option>
+                    <option value="2">Nivel 2 (Primera Div - LPF)</option>
+                    <option value="3">Nivel 3 (Primera Nacional)</option>
+                    <option value="4">Nivel 4 (Federal A)</option>
+                    <option value="5">Nivel 5 (Regional Amateur)</option>
+                    <option value="6">Nivel 6 (Promocional)</option>
+                    <option value="7">Nivel 7 (Copas Prov)</option>
+                    <option value="8">Nivel 8 (Ligas Regionales)</option>
+                  </select>
+
+                  <select
+                    style={{ ...s.select, width: "auto", fontSize: 13, padding: "10px 12px" }}
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as any)}
+                  >
+                    <option value="level-asc">Jerarquía (1 → 8)</option>
+                    <option value="level-desc">Jerarquía (8 → 1)</option>
+                    <option value="teams-desc">Más equipos primero</option>
+                    <option value="teams-asc">Menos equipos primero</option>
+                    <option value="name-asc">Nombre (A-Z)</option>
+                    <option value="name-desc">Nombre (Z-A)</option>
+                  </select>
+
                   <button
                     style={s.btnPrimary}
                     onClick={() => {
@@ -683,13 +798,38 @@ export default function CompetitionsAdminPage() {
           <>
             {leagueMode === "IDLE" && (
               <div style={s.section}>
-                <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
                   <input
-                    style={{ ...s.input, flex: 1, fontSize: 14, padding: "10px 14px" }}
+                    style={{ ...s.input, flex: 1, minWidth: 200, fontSize: 14, padding: "10px 14px" }}
                     placeholder="Buscar liga regional por nombre, provincia o slug..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                   />
+
+                  <select
+                    style={{ ...s.select, width: "auto", fontSize: 13, padding: "10px 12px" }}
+                    value={selectedProvinceFilter}
+                    onChange={(e) => setSelectedProvinceFilter(e.target.value)}
+                  >
+                    <option value="">-- Todas las provincias --</option>
+                    {provinces.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+
+                  <select
+                    style={{ ...s.select, width: "auto", fontSize: 13, padding: "10px 12px" }}
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as any)}
+                  >
+                    <option value="name-asc">Nombre (A-Z)</option>
+                    <option value="name-desc">Nombre (Z-A)</option>
+                    <option value="teams-desc">Más equipos primero</option>
+                    <option value="teams-asc">Menos equipos primero</option>
+                  </select>
+
                   <button
                     style={s.btnPrimary}
                     onClick={() => {
@@ -698,6 +838,14 @@ export default function CompetitionsAdminPage() {
                     }}
                   >
                     + Nueva Liga Regional
+                  </button>
+
+                  <button
+                    style={{ ...s.btnSecondary, background: "#fef3c7", color: "#92400e", borderColor: "#fde68a" }}
+                    onClick={handleAutoMerge}
+                    title="Busca y fusiona ligas con nombres idénticos/duplicados reasignando sus clubes"
+                  >
+                    ⚡ Auto-Fusionar Ligas Duplicadas
                   </button>
                 </div>
 
@@ -748,6 +896,13 @@ export default function CompetitionsAdminPage() {
                             <td style={s.td}>{l.foundation || <span style={{ color: "#94a3b8" }}>—</span>}</td>
                             <td style={s.td}>{l._count?.clubs ?? 0}</td>
                             <td style={{ ...s.td, textAlign: "right" }}>
+                              <button
+                                onClick={() => handleOpenTitleModal(l)}
+                                style={{ ...s.btnSmall, background: "#fef9c3", color: "#854d0e", borderColor: "#fef08a" }}
+                                title="Asignar un título/campeonato directamente a un club de esta liga"
+                              >
+                                🏆 Títulos
+                              </button>
                               <button onClick={() => handleEditLeague(l)} style={s.btnSmall}>
                                 Editar
                               </button>
@@ -905,6 +1060,102 @@ export default function CompetitionsAdminPage() {
             )}
           </>
         )}
+
+        {/* Modal de Carga Rápida de Títulos */}
+        {titleModalOpen && selectedLeagueForTitles && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl border border-gray-100 space-y-4">
+              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
+                <div className="font-bold text-gray-900 text-base flex items-center gap-2">
+                  <span>🏆</span> Asignar Título a un Club
+                </div>
+                <button
+                  onClick={() => setTitleModalOpen(false)}
+                  className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveTitle} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    Liga / Torneo
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    className="w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 font-semibold"
+                    value={selectedLeagueForTitles.name}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    Seleccionar Club Campeón *
+                  </label>
+                  <select
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    value={selectedClubForTitle}
+                    onChange={(e) => setSelectedClubForTitle(e.target.value)}
+                    required
+                  >
+                    <option value="">-- Seleccionar Club ({leagueClubsForTitles.length} disponibles) --</option>
+                    {leagueClubsForTitles.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.shortName || c.fullName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    Nombre del Título / Campeonato *
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={titleNameInput}
+                    onChange={(e) => setTitleNameInput(e.target.value)}
+                    placeholder="Ej: Liga Santafesina de Fútbol"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
+                    Cantidad de Títulos a Añadir
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={titleCountInput}
+                    onChange={(e) => setTitleCountInput(Math.max(1, parseInt(e.target.value) || 1))}
+                  />
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button
+                    type="submit"
+                    disabled={titleSaving}
+                    className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2.5 px-4 rounded-xl shadow-sm transition-colors text-sm"
+                  >
+                    {titleSaving ? "Guardando..." : "🏆 Guardar Título en el Club"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTitleModalOpen(false)}
+                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 px-4 rounded-xl transition-colors text-sm"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -951,7 +1202,9 @@ const s: Record<string, React.CSSProperties> = {
     fontWeight: 600,
     color: "#64748b",
     background: "#f1f5f9",
-    border: "1px solid #cbd5e1",
+    borderWidth: "1px",
+    borderStyle: "solid",
+    borderColor: "#cbd5e1",
     cursor: "pointer",
     transition: "all 0.15s ease",
   },

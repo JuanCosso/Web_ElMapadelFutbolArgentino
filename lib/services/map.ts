@@ -2,6 +2,14 @@ import { prisma } from "@/lib/prisma";
 import fs from "fs";
 import path from "path";
 
+function normKey(s: string) {
+  return (s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .trim();
+}
+
 type ClubMapRow = {
   id: string;
   slug: string;
@@ -51,18 +59,58 @@ export async function getClubFeatureCollection(): Promise<ClubFeatureCollection>
           l."name" AS "city",
           ll."name" AS "league",
           ST_X(c."location")::double precision AS "longitude",
-          ST_Y(c."location")::double precision AS "latitude"
+          ST_Y(c."location")::double precision AS "latitude",
+          COALESCE(
+            MIN(comp."level"),
+            CASE 
+              WHEN EXISTS (
+                SELECT 1 FROM "Title" t 
+                WHERE t."clubId" = c."id" 
+                AND (
+                  LOWER(t."name") LIKE '%primera%' 
+                  OR LOWER(t."name") LIKE '%libertadores%' 
+                  OR LOWER(t."name") LIKE '%nacional%' 
+                  OR LOWER(t."name") LIKE '%afa%'
+                  OR LOWER(t."name") LIKE '%sudamericana%'
+                  OR LOWER(t."name") LIKE '%profesional%'
+                )
+              ) THEN 2
+              ELSE 8
+            END
+          )::integer AS "level"
         FROM "Club" c
         INNER JOIN "Locality" l ON l."id" = c."localityId"
         INNER JOIN "Province" p ON p."id" = l."provinceId"
         LEFT JOIN "LocalLeague" ll ON ll."id" = c."localLeagueId"
-        ORDER BY p."name", l."name", c."fullName"
+        LEFT JOIN "_ClubToCompetition" c2comp ON c2comp."B" = c."id"
+        LEFT JOIN "Competition" comp ON comp."id" = c2comp."A"
+        GROUP BY c."id", c."slug", c."fullName", c."shortName", c."crestUrl", p."name", l."name", ll."name", c."location"
+        ORDER BY 
+          COALESCE(
+            MIN(comp."level"),
+            CASE 
+              WHEN EXISTS (
+                SELECT 1 FROM "Title" t 
+                WHERE t."clubId" = c."id" 
+                AND (
+                  LOWER(t."name") LIKE '%primera%' 
+                  OR LOWER(t."name") LIKE '%libertadores%' 
+                  OR LOWER(t."name") LIKE '%nacional%' 
+                  OR LOWER(t."name") LIKE '%afa%'
+                  OR LOWER(t."name") LIKE '%sudamericana%'
+                  OR LOWER(t."name") LIKE '%profesional%'
+                )
+              ) THEN 2
+              ELSE 8
+            END
+          ) DESC, 
+          c."fullName" ASC
       `;
 
       if (rows && rows.length > 0) {
         return {
           type: "FeatureCollection",
-          features: rows.map((club) => ({
+          features: rows.map((club: any) => ({
             type: "Feature",
             geometry: {
               type: "Point",
@@ -76,6 +124,8 @@ export async function getClubFeatureCollection(): Promise<ClubFeatureCollection>
               city: club.city,
               league: club.league,
               badge_url: club.crestUrl || `/badges/${club.slug}.webp`,
+              level: Number(club.level ?? 8),
+              sort_order: 100 - Number(club.level ?? 8),
             },
           })),
         };
@@ -90,7 +140,17 @@ export async function getClubFeatureCollection(): Promise<ClubFeatureCollection>
     const filePath = path.join(process.cwd(), "public", "data", "clubs.geojson");
     if (fs.existsSync(filePath)) {
       const data = fs.readFileSync(filePath, "utf-8");
-      return JSON.parse(data);
+      const parsed = JSON.parse(data);
+      if (parsed?.features) {
+        parsed.features.forEach((f: any) => {
+          const p = f.properties || {};
+          const level = p.level !== undefined ? Number(p.level) : 8;
+          p.level = level;
+          p.sort_order = 100 - level;
+        });
+        parsed.features.sort((a: any, b: any) => (a.properties?.sort_order ?? 0) - (b.properties?.sort_order ?? 0));
+      }
+      return parsed;
     }
   } catch (err) {
     console.error("Failed to read fallback clubs.geojson:", err);
@@ -108,12 +168,18 @@ export async function getProvinceFeatureCollection(): Promise<GeoJSON.FeatureCol
           p."name",
           p."slug",
           ST_AsGeoJSON(p."boundary")::json AS "geometry",
-          COUNT(DISTINCT c."id")::integer AS "clubCount",
-          COUNT(DISTINCT c."localLeagueId")::integer AS "leagueCount"
+          (
+            SELECT COUNT(DISTINCT c."id")::integer
+            FROM "Locality" l
+            JOIN "Club" c ON c."localityId" = l."id"
+            WHERE l."provinceId" = p."id"
+          ) AS "clubCount",
+          (
+            SELECT COUNT(DISTINCT ll."id")::integer
+            FROM "LocalLeague" ll
+            WHERE ll."provinceId" = p."id"
+          ) AS "leagueCount"
         FROM "Province" p
-        LEFT JOIN "Locality" l ON l."provinceId" = p."id"
-        LEFT JOIN "Club" c ON c."localityId" = l."id"
-        GROUP BY p."id"
         ORDER BY p."name"
       `;
 
@@ -207,4 +273,139 @@ export async function getClubDetail(slug: string) {
 
   return null;
 }
+
+export async function getLeaguesForSearch() {
+  if (!process.env.DATABASE_URL) return [];
+  try {
+    const [leagues, competitions] = await Promise.all([
+      prisma.localLeague.findMany({
+        include: { province: { select: { name: true } } },
+      }),
+      prisma.competition.findMany(),
+    ]);
+
+    const leagueItems = leagues.map((l) => ({
+      type: "league" as const,
+      key: `league-${l.slug}`,
+      league_id: l.slug,
+      label: l.name,
+      sublabel: l.province ? `Liga Regional · ${l.province.name}` : "Liga Regional",
+      province: l.province?.name,
+      logo_url: l.logoUrl || undefined,
+      foundation: l.foundation || undefined,
+    }));
+
+    const compItems = competitions.map((c) => ({
+      type: "league" as const,
+      key: `comp-${c.slug}`,
+      league_id: c.slug,
+      label: c.name,
+      sublabel: c.level ? `Torneo Oficial · Nivel ${c.level}` : "Torneo / Ente Oficial",
+      logo_url: c.logoUrl || undefined,
+      foundation: c.foundation || undefined,
+    }));
+
+    return [...leagueItems, ...compItems];
+  } catch (e) {
+    console.warn("Failed to fetch leagues for search index:", e);
+    return [];
+  }
+}
+
+export async function getLeagueDetail(slug: string) {
+  if (process.env.DATABASE_URL) {
+    try {
+      // 1. Probar en LocalLeague
+      const league = await prisma.localLeague.findUnique({
+        where: { slug },
+        include: {
+          province: true,
+          clubs: {
+            include: { titles: true },
+          },
+        },
+      });
+
+      if (league) {
+        const targetName = normKey(league.name);
+        const champions = league.clubs
+          .map((c) => {
+            // Filtrar títulos pertenecientes específicamente a esta liga
+            const leagueTitles = c.titles.filter((t) => {
+              const tName = normKey(t.name);
+              return tName.includes(targetName) || targetName.includes(tName);
+            });
+            const titleCount = leagueTitles.reduce((acc, t) => acc + (t.count || 1), 0);
+            return {
+              clubId: c.slug,
+              name: c.shortName || c.fullName,
+              fullName: c.fullName,
+              crestUrl: c.crestUrl || `/badges/${c.slug}.webp`,
+              titleCount,
+            };
+          })
+          .sort((a, b) => b.titleCount - a.titleCount);
+
+        return {
+          type: "league" as const,
+          league_id: league.slug,
+          name: league.name,
+          slug: league.slug,
+          province: league.province.name,
+          organizer: league.organizer,
+          foundation: league.foundation,
+          logoUrl: league.logoUrl,
+          champions,
+        };
+      }
+
+      // 2. Probar en Competition
+      const comp = await prisma.competition.findUnique({
+        where: { slug },
+        include: {
+          clubs: {
+            include: { titles: true },
+          },
+        },
+      });
+
+      if (comp) {
+        const targetName = normKey(comp.name);
+        const champions = comp.clubs
+          .map((c) => {
+            // Filtrar títulos pertenecientes específicamente a esta competencia
+            const compTitles = c.titles.filter((t) => {
+              const tName = normKey(t.name);
+              return tName.includes(targetName) || targetName.includes(tName);
+            });
+            const titleCount = compTitles.reduce((acc, t) => acc + (t.count || 1), 0);
+            return {
+              clubId: c.slug,
+              name: c.shortName || c.fullName,
+              fullName: c.fullName,
+              crestUrl: c.crestUrl || `/badges/${c.slug}.webp`,
+              titleCount,
+            };
+          })
+          .sort((a, b) => b.titleCount - a.titleCount);
+
+        return {
+          type: "competition" as const,
+          league_id: comp.slug,
+          name: comp.name,
+          slug: comp.slug,
+          level: comp.level,
+          foundation: comp.foundation,
+          logoUrl: comp.logoUrl,
+          champions,
+        };
+      }
+    } catch (e) {
+      console.warn("Error fetching league detail:", e);
+    }
+  }
+
+  return null;
+}
+
 

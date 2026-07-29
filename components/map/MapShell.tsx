@@ -5,31 +5,40 @@ import { useEffect, useMemo, useState } from "react";
 import MapView, { ClubInfo, ProvinceInfo } from "./MapView";
 import type { BasemapId } from "./style";
 import ClubDrawer from "./ClubDrawer";
+import LeagueDrawer, { LeagueInfo } from "./LeagueDrawer";
 import MapPanel from "./MapPanel";
 import MapLayerControl from "./MapLayerControl";
 import SearchBar from "./SearchBar";
 import { buildSearchIndex, ClubFeature } from "@/utils/searchIndex";
 import type { SearchItem } from "@/utils/searchIndex";
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams } from "next/navigation";
 
 type FeatureCollection = { type: "FeatureCollection"; features: ClubFeature[] };
 
 export default function MapShell() {
+  const searchParams = useSearchParams();
   const [basemap, setBasemap] = useState<BasemapId>("streets");
   const [roads, setRoads] = useState(false);
 
   const [clubsGeojson, setClubsGeojson] = useState<FeatureCollection | null>(null);
+  const [leaguesList, setLeaguesList] = useState<SearchItem[]>([]);
+
   useEffect(() => {
     fetch("/api/map/clubs")
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => (j?.type === "FeatureCollection" ? setClubsGeojson(j) : null))
       .catch(() => {});
+
+    fetch("/api/map/leagues")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((j) => (Array.isArray(j) ? setLeaguesList(j) : null))
+      .catch(() => {});
   }, []);
 
   const searchIndex = useMemo(() => {
     if (!clubsGeojson) return [];
-    return buildSearchIndex(clubsGeojson.features);
-  }, [clubsGeojson]);
+    return buildSearchIndex(clubsGeojson.features, leaguesList);
+  }, [clubsGeojson, leaguesList]);
 
   const [mapApi, setMapApi] = useState<{
     flyTo: (center: [number, number], zoom?: number) => void;
@@ -39,9 +48,13 @@ export default function MapShell() {
 
   const [provinceInfo, setProvinceInfo] = useState<ProvinceInfo | null>(null);
 
-  // ✅ Un solo objeto para el club seleccionado
+  // Club seleccionado
   const [selectedClub, setSelectedClub] = useState<ClubInfo | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+
+  // Liga seleccionada
+  const [selectedLeague, setSelectedLeague] = useState<LeagueInfo | null>(null);
+  const [leagueDrawerOpen, setLeagueDrawerOpen] = useState(false);
 
   // Club bajo el cursor
   const [hoverClub, setHoverClub] = useState<ClubInfo | null>(null);
@@ -50,14 +63,43 @@ export default function MapShell() {
   const handleHomeReady = (fn: (() => void) | null) => setGoHome(fn ? () => fn : null);
 
   const openClub = (info: ClubInfo) => {
+    setSelectedLeague(null);
+    setLeagueDrawerOpen(false);
     setSelectedClub(info);
     setDrawerOpen(true);
   };
+
   const closeClub = () => {
     setSelectedClub(null);
     setDrawerOpen(false);
-    window.history.pushState(null, '', '/');
+    if (typeof window !== "undefined" && window.location.pathname.startsWith("/club/")) {
+      window.history.pushState(null, "", "/");
+    }
   };
+
+  const openLeague = (info: LeagueInfo) => {
+    setSelectedClub(null);
+    setDrawerOpen(false);
+    setSelectedLeague(info);
+    setLeagueDrawerOpen(true);
+  };
+
+  const closeLeague = () => {
+    setSelectedLeague(null);
+    setLeagueDrawerOpen(false);
+  };
+
+  // URL lat/lng handler al cargar el mapa
+  useEffect(() => {
+    if (!mapApi || !searchParams) return;
+    const lat = searchParams.get("lat");
+    const lng = searchParams.get("lng");
+
+    if (lat && lng) {
+      mapApi.flyTo([parseFloat(lng), parseFloat(lat)], 14);
+      window.history.replaceState(null, "", "/");
+    }
+  }, [mapApi, searchParams]);
 
   // El panel muestra hover si existe, si no el seleccionado
   const panelClub = hoverClub ?? selectedClub;
@@ -65,6 +107,7 @@ export default function MapShell() {
   const onSearchSelect = (item: SearchItem) => {
     if (!mapApi) return;
     mapApi.clearFilter();
+
     if (item.type === "club") {
       mapApi.flyTo(item.center, 13);
       openClub({
@@ -76,32 +119,62 @@ export default function MapShell() {
         league: item.league ?? "",
         badgeUrl: item.badge_url,
       });
-      const searchParams = useSearchParams();
-      useEffect(() => {
-        // Si la API del mapa no cargó todavía, esperamos
-        if (!mapApi) return;
-      
-        // Buscamos si la URL trajo coordenadas
-        const lat = searchParams.get('lat');
-        const lng = searchParams.get('lng');
-      
-        if (lat && lng) {
-          // Hacemos el vuelo hacia el club (14 es un zoom ideal para ver la zona)
-          mapApi.flyTo([parseFloat(lng), parseFloat(lat)], 14);
-
-          // Limpiamos la URL sin recargar la página para borrar el "?lat=...&lng=..."
-          // Así mantenemos la barra de direcciones limpia
-          window.history.replaceState(null, '', '/');
-        }
-      }, [mapApi, searchParams]);
       return;
     }
-    mapApi.fitBBox(item.bbox);
+
+    if (item.type === "league") {
+      openLeague({
+        leagueId: item.league_id,
+        name: item.label,
+        province: item.province,
+        logoUrl: item.logo_url,
+      });
+      return;
+    }
+
+    if (item.bbox) {
+      mapApi.fitBBox(item.bbox);
+    }
+  };
+
+  const handleSelectClubFromLeague = (clubSlug: string) => {
+    const foundClub = clubsGeojson?.features.find(
+      (f) => String(f.properties?.club_id || f.properties?.slug) === clubSlug
+    );
+
+    if (foundClub) {
+      const p = foundClub.properties;
+      const c = foundClub.geometry.coordinates;
+      if (mapApi && c) {
+        mapApi.flyTo([c[0], c[1]], 13);
+      }
+      openClub({
+        clubId: clubSlug,
+        name: String(p.name || clubSlug),
+        fullName: p.full_name ? String(p.full_name) : undefined,
+        province: String(p.province || ""),
+        city: String(p.city || ""),
+        league: String(p.league || ""),
+        badgeUrl: p.badge_url ? String(p.badge_url) : undefined,
+      });
+    } else {
+      openClub({
+        clubId: clubSlug,
+        name: clubSlug,
+        province: "",
+        city: "",
+        league: "",
+      });
+    }
   };
 
   return (
     <div className="relative h-screen w-screen">
-      <SearchBar index={searchIndex} onSelect={onSearchSelect} />
+      <SearchBar
+        index={searchIndex}
+        onSelect={onSearchSelect}
+        isDrawerOpen={drawerOpen || leagueDrawerOpen}
+      />
 
       <MapView
         basemap={basemap}
@@ -130,12 +203,19 @@ export default function MapShell() {
         onHome={goHome}
       />
 
-      {/* ✅ Ahora recibe el objeto completo */}
       <ClubDrawer
         open={drawerOpen}
         club={selectedClub}
         onClose={closeClub}
       />
+
+      <LeagueDrawer
+        open={leagueDrawerOpen}
+        league={selectedLeague}
+        onClose={closeLeague}
+        onSelectClub={handleSelectClubFromLeague}
+      />
     </div>
   );
 }
+

@@ -231,3 +231,96 @@ export async function deleteLocalLeague(id: string) {
     return { error: err.message || "No se pudo eliminar la liga regional." };
   }
 }
+
+export async function mergeDuplicateLeagues(targetLeagueId: string, sourceLeagueId: string) {
+  try {
+    // 1. Reasignar todos los clubes de la liga duplicada hacia la liga principal
+    await prisma.club.updateMany({
+      where: { localLeagueId: sourceLeagueId },
+      data: { localLeagueId: targetLeagueId },
+    });
+    // 2. Eliminar el registro duplicado sobrante
+    await prisma.localLeague.delete({
+      where: { id: sourceLeagueId },
+    });
+    return { success: true };
+  } catch (error: unknown) {
+    const err = error as { message?: string };
+    return { error: err.message || "Error al fusionar las ligas duplicadas." };
+  }
+}
+
+export async function autoMergeDuplicateLocalLeagues() {
+  try {
+    const leagues = await prisma.localLeague.findMany({
+      include: { province: true, clubs: true },
+    });
+
+    const groups: Record<string, typeof leagues> = {};
+    for (const l of leagues) {
+      const norm = l.name.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").trim();
+      if (!groups[norm]) groups[norm] = [];
+      groups[norm].push(l);
+    }
+
+    let mergedCount = 0;
+    for (const norm in groups) {
+      const list = groups[norm];
+      if (list.length > 1) {
+        list.sort((a, b) => b.clubs.length - a.clubs.length);
+        const main = list[0];
+        const duplicates = list.slice(1);
+
+        for (const dup of duplicates) {
+          await prisma.club.updateMany({
+            where: { localLeagueId: dup.id },
+            data: { localLeagueId: main.id },
+          });
+          await prisma.localLeague.delete({ where: { id: dup.id } });
+          mergedCount++;
+        }
+      }
+    }
+    return { success: true, mergedCount };
+  } catch (error: unknown) {
+    const err = error as { message?: string };
+    return { error: err.message || "Error al auto-fusionar ligas duplicadas." };
+  }
+}
+
+export async function addClubTitleFromAdmin(clubId: string, titleName: string, count: number = 1) {
+  try {
+    if (!clubId || !titleName) return { error: "Faltan datos requeridos para registrar el título." };
+    const existing = await prisma.title.findFirst({
+      where: { clubId, name: titleName },
+    });
+
+    if (existing) {
+      await prisma.title.update({
+        where: { id: existing.id },
+        data: { count: (existing.count || 1) + count },
+      });
+    } else {
+      await prisma.title.create({
+        data: { clubId, name: titleName, count },
+      });
+    }
+    return { success: true };
+  } catch (error: unknown) {
+    const err = error as { message?: string };
+    return { error: err.message || "Error al registrar el título." };
+  }
+}
+
+export async function getClubsByLeagueId(localLeagueId: string) {
+  try {
+    const clubs = await prisma.club.findMany({
+      where: { localLeagueId },
+      select: { id: true, fullName: true, shortName: true, slug: true, crestUrl: true },
+      orderBy: { fullName: "asc" },
+    });
+    return clubs;
+  } catch (error) {
+    return [];
+  }
+}

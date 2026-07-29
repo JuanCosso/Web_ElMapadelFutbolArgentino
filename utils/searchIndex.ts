@@ -23,6 +23,18 @@ export type SearchItem =
       city: string;
     }
   | {
+      type: "league";
+      key: string;
+      label: string;
+      sublabel?: string;
+      league_id: string;
+      logo_url?: string;
+      foundation?: string;
+      province?: string;
+      center?: [number, number];
+      bbox?: BBox;
+    }
+  | {
       type: "club";
       key: string; // club_id
       label: string; // name
@@ -34,6 +46,7 @@ export type SearchItem =
       province?: string;
       city?: string;
       league?: string;
+      level?: number;
     };
 
 export type ClubProperties = {
@@ -55,6 +68,7 @@ export type ClubProperties = {
   badge_url?: string;
   badgeUrl?: string;
   badge?: string;
+  level?: number | string;
 };
 
 export type ClubFeature = {
@@ -100,7 +114,7 @@ function bboxOf(coords: [number, number][]): BBox {
   return [minLng, minLat, maxLng, maxLat];
 }
 
-export function buildSearchIndex(features: ClubFeature[]): SearchItem[] {
+export function buildSearchIndex(features: ClubFeature[], leagues: SearchItem[] = []): SearchItem[] {
   const provinceCoords = new Map<string, [number, number][]>();
   const provinceCities = new Map<string, Set<string>>();
 
@@ -116,6 +130,7 @@ export function buildSearchIndex(features: ClubFeature[]): SearchItem[] {
       const league = String(p.league || p.liga || "");
       const name = String(p.name || p.nombre || "Club");
       const full_name = p.full_name || p.fullName || p.nombre_completo || undefined;
+      const level = p.level !== undefined ? Number(p.level) : 8;
 
       const club_id = String(p.club_id || p.id || p.clubId || p.slug || "");
       const badge_url = p.badge_url || p.badgeUrl || p.badge || (club_id ? `/badges/${club_id}.webp` : undefined);
@@ -151,6 +166,7 @@ export function buildSearchIndex(features: ClubFeature[]): SearchItem[] {
         province: province || undefined,
         city: city || undefined,
         league: league || undefined,
+        level,
       };
     });
 
@@ -182,20 +198,21 @@ export function buildSearchIndex(features: ClubFeature[]): SearchItem[] {
     };
   });
 
-  return [...provinces, ...cities, ...clubs];
+  return [...provinces, ...cities, ...leagues, ...clubs];
 }
 
 /**
  * Búsqueda avanzada:
- * - Si q coincide EXACTO con una provincia: devuelve provincia + TODAS sus ciudades + TODOS sus clubes (scrolleable)
- * - Si no: ranking normal, pero club-name pesa más que sublabels
+ * - Ordena clubes considerando su jerarquía oficial (nivel de torneo)
+ * - Incluye provincias, ciudades, ligas y clubes
  */
-export function searchItems(index: SearchItem[], query: string, limit = 80): SearchItem[] {
+export function searchItems(index: SearchItem[], query: string, limit = 400): SearchItem[] {
   const q = normalize(query);
   if (!q) return [];
 
   const provinces = index.filter((x) => x.type === "province") as Extract<SearchItem, { type: "province" }>[];
   const cities = index.filter((x) => x.type === "city") as Extract<SearchItem, { type: "city" }>[];
+  const leagues = index.filter((x) => x.type === "league") as Extract<SearchItem, { type: "league" }>[];
   const clubs = index.filter((x) => x.type === "club") as Extract<SearchItem, { type: "club" }>[];
 
   // 1) match exacto de provincia -> listado “completo” por provincia
@@ -218,10 +235,6 @@ export function searchItems(index: SearchItem[], query: string, limit = 80): Sea
   const contains = (field: string) => field.includes(q);
   const starts = (field: string) => field.startsWith(q);
 
-  // ⚠️ Gate: solo dejamos pasar items que realmente contienen el query
-  // - Club: label o full_name o sublabel (ciudad/prov) (NO key)
-  // - City: label o sublabel
-  // - Province: label
   const passGate = (item: SearchItem) => {
     const label = normalize(item.label);
 
@@ -231,12 +244,16 @@ export function searchItems(index: SearchItem[], query: string, limit = 80): Sea
       return contains(label) || contains(full) || contains(sub);
     }
 
+    if (item.type === "league") {
+      const sub = normalize(item.sublabel || "");
+      return contains(label) || contains(sub);
+    }
+
     if (item.type === "city") {
       const sub = normalize(item.sublabel || "");
       return contains(label) || contains(sub);
     }
 
-    // province
     return contains(label);
   };
 
@@ -247,7 +264,7 @@ export function searchItems(index: SearchItem[], query: string, limit = 80): Sea
     return 0;
   };
 
-  // 2) Score + threshold (evita basura)
+  // 2) Score + threshold + bonificación por jerarquía de torneo
   const scored = index
     .filter(passGate)
     .map((item) => {
@@ -257,12 +274,19 @@ export function searchItems(index: SearchItem[], query: string, limit = 80): Sea
       if (item.type === "club") {
         const sub = normalize(item.sublabel || "");
         const full = normalize(item.full_name || "");
-        // nombre del club manda
         score = Math.max(score, scoreText(label, 260, 170));
         score = Math.max(score, scoreText(full, 200, 130));
-        // ciudad/prov pesa poco
         score = Math.max(score, scoreText(sub, 70, 40));
-        score += 25;
+
+        // 🌟 Bonificación por jerarquía de torneo (menor nivel = mayor categoría)
+        const lvl = Math.min(Math.max(item.level ?? 8, 1), 8);
+        const hierarchyBonus = (10 - lvl) * 20; // Nivel 1: +180 pts, Nivel 2: +160 pts... Nivel 8: +40 pts
+        score += 25 + hierarchyBonus;
+      } else if (item.type === "league") {
+        const sub = normalize(item.sublabel || "");
+        score = Math.max(score, scoreText(label, 200, 140));
+        score = Math.max(score, scoreText(sub, 80, 50));
+        score += 30;
       } else if (item.type === "city") {
         const sub = normalize(item.sublabel || "");
         score = Math.max(score, scoreText(label, 170, 110));
@@ -274,7 +298,6 @@ export function searchItems(index: SearchItem[], query: string, limit = 80): Sea
 
       return { item, score };
     })
-    // ✅ threshold mínimo: ajustable
     .filter((x) => x.score >= 80)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit)
@@ -282,4 +305,5 @@ export function searchItems(index: SearchItem[], query: string, limit = 80): Sea
 
   return scored;
 }
+
 

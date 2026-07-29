@@ -109,14 +109,16 @@ export const STYLE: StyleSpecification = {
     "icon-image": ["get", "club_id"],
     "icon-size": [
       "interpolate", ["linear"], ["zoom"],
-      CLUBS_MINZOOM, 0.45,
-      9, 0.70,
-      12, 0.95
+      CLUBS_MINZOOM, 0.12,
+      9, 0.22,
+      12, 0.35,
+      15, 0.50
     ],
     "icon-allow-overlap": true,
     "icon-ignore-placement": true,
     "icon-anchor": "center",
-    "symbol-z-order": "source",
+    "symbol-sort-key": ["coalesce", ["get", "sort_order"], 0],
+    "symbol-z-order": "auto",
   },
 }
 

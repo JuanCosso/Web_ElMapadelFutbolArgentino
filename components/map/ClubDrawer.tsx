@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   MapPin,
   Calendar,
@@ -44,11 +44,11 @@ type ClubDetail = {
 function InfoRow({ icon, label, value }: { icon: React.ReactNode; label: string; value?: React.ReactNode }) {
   if (!value || value === "") return null;
   return (
-    <div className="flex items-start gap-3">
+    <div className="flex items-start gap-3 min-w-0">
       <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center flex-shrink-0 text-gray-700">
         {icon}
       </div>
-      <div className="min-w-0 pt-0.5">
+      <div className="min-w-0 pt-0.5 flex-1">
         <div className="text-[11px] text-gray-500 uppercase tracking-wide mb-0.5 font-medium">{label}</div>
         <div className="text-sm font-semibold text-gray-900 whitespace-normal break-words leading-snug">
           {value}
@@ -73,24 +73,34 @@ export default function ClubDrawer({
   const [loading, setLoading] = useState(false);
   const [activeTab, setActiveTab] = useState<TabType>("info");
 
-  // Fetch de datos
+  // Caché en memoria para carga 0ms al abrir o cambiar entre clubes
+  const clubCache = useRef<Map<string, ClubDetail>>(new Map());
+
+  // Fetch de datos optimizado
   useEffect(() => {
     if (!open || !club?.clubId) return;
+    const cid = club.clubId;
     let ignore = false;
-    
-    Promise.resolve().then(() => {
-      if (!ignore) {
-        setLoading(true);
-        setData(null);
-        setActiveTab("info"); // Reseteamos a la primera pestaña siempre que abrimos un club nuevo
-      }
-    });
 
-    fetch(`/api/clubs/${encodeURIComponent(club.clubId)}`)
+    setActiveTab("info");
+
+    if (clubCache.current.has(cid)) {
+      setData(clubCache.current.get(cid)!);
+      setLoading(false);
+      return;
+    }
+
+    setLoading(true);
+
+    fetch(`/api/clubs/${encodeURIComponent(cid)}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((j) => {
-        if (!ignore) setData(j);
+        if (!ignore && j) {
+          clubCache.current.set(cid, j);
+          setData(j);
+        }
       })
+      .catch(() => {})
       .finally(() => {
         if (!ignore) setLoading(false);
       });
@@ -138,9 +148,9 @@ export default function ClubDrawer({
         absolute bottom-0 left-0 right-0 rounded-t-3xl pointer-events-auto
         sm:bottom-auto sm:top-0 sm:left-auto sm:right-0 sm:rounded-none sm:rounded-l-none
         h-[90vh] sm:h-full
-        w-full sm:w-[460px]
+        w-full sm:w-[460px] max-w-full overflow-x-hidden
         bg-white shadow-2xl border-t sm:border-t-0 sm:border-l border-black/10
-        flex flex-col
+        flex flex-col min-w-0
       ">
         {/* Handle visual mobile */}
         <div className="flex justify-center pt-3 pb-1 sm:hidden">
@@ -148,7 +158,7 @@ export default function ClubDrawer({
         </div>
 
         {/* Header Superior */}
-        <div className="px-4 py-2 flex items-center justify-between pt-10 sm:pt-4">
+        <div className="px-4 py-2 flex items-center justify-between pt-10 sm:pt-4 border-b border-gray-100">
           <div className="text-xs font-semibold text-gray-400 uppercase tracking-widest">
             Ficha del Club
           </div>
@@ -163,9 +173,9 @@ export default function ClubDrawer({
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col">
+        <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col min-w-0">
           {/* Hero Section */}
-          <div className="px-6 pb-6 pt-2 flex flex-col items-center text-center">
+          <div className="px-6 pb-6 pt-2 flex flex-col items-center text-center min-w-0">
             {finalBadgeUrl ? (
               <img
                 key={`${club.clubId}-${finalBadgeUrl}`}
@@ -189,7 +199,7 @@ export default function ClubDrawer({
               </div>
             )}
 
-            <div className="mt-4 text-2xl font-extrabold text-gray-900 leading-tight">
+            <div className="mt-4 text-2xl font-extrabold text-gray-900 leading-tight break-words max-w-full">
               {title}
             </div>
 
@@ -206,7 +216,7 @@ export default function ClubDrawer({
           </div>
 
           {/* Sistema de Pestañas Dinámicas */}
-          <div className="flex border-b border-gray-200 px-2">
+          <div className="flex border-b border-gray-200 px-2 min-w-0">
             <button 
               onClick={() => setActiveTab("info")}
               className={`flex-1 pb-3 text-sm font-semibold transition-colors border-b-2 ${activeTab === "info" ? "border-gray-900 text-gray-900" : "border-transparent text-gray-500 hover:text-gray-700"}`}
@@ -232,7 +242,7 @@ export default function ClubDrawer({
           </div>
 
           {/* Contenedor de Contenido según Pestaña */}
-          <div className="p-4 flex-1 bg-white">
+          <div className="p-4 flex-1 bg-white min-w-0">
             
             {loading ? (
               <div className="py-10 flex flex-col items-center justify-center gap-3 text-gray-400">
@@ -243,17 +253,17 @@ export default function ClubDrawer({
               <>
                 {/* PESTAÑA: INFORMACIÓN */}
                 {activeTab === "info" && (
-                  <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div className="space-y-4 animate-in fade-in duration-150 min-w-0">
                     
-                    {/* Caja de Datos Generales idéntica a la imagen */}
-                    <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
-                      <div className="flex items-center gap-2 mb-5 text-[11px] font-bold text-gray-600 uppercase tracking-widest">
+                    {/* Caja de Datos Generales */}
+                    <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100 min-w-0">
+                      <div className="flex items-center gap-2 mb-4 text-[11px] font-bold text-gray-600 uppercase tracking-widest">
                         <Shield size={16} className="text-gray-900" /> Datos Generales
                       </div>
                       
-                      <div className="space-y-4">
-                        <InfoRow icon={<MapPin size={18} />} label="Ciudad" value={data?.city ? `${data.city}, ${data.province}` : undefined} />
-                        <InfoRow icon={<Trophy size={18} />} label="Liga" value={data?.league} />
+                      <div className="space-y-3 min-w-0">
+                        <InfoRow icon={<MapPin size={18} />} label="Ciudad" value={data?.city || club.city ? `${data?.city || club.city}, ${data?.province || club.province}` : undefined} />
+                        <InfoRow icon={<Trophy size={18} />} label="Liga" value={data?.league || club.league} />
                         {data?.founded && (
                           <InfoRow icon={<Calendar size={18} />} label="Fundación" value={data.founded} />
                         )}
@@ -266,29 +276,29 @@ export default function ClubDrawer({
                       </div>
                     </div>
 
-                    {/* Clubes Cercanos (Solo si hay y si estamos en Info) */}
+                    {/* Clubes Cercanos */}
                     {data?.nearby && data.nearby.length > 0 && (
-                      <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100">
+                      <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100 min-w-0">
                         <div className="flex items-center gap-2 mb-4 text-[11px] font-bold text-gray-600 uppercase tracking-widest">
                           <Navigation size={16} className="text-gray-900" /> Clubes Cercanos
                         </div>
-                        <div className="flex flex-col gap-1">
+                        <div className="flex flex-col gap-1 min-w-0">
                           {data.nearby.map((c, i) => (
                             <Link 
                               key={i} 
                               href={`/club/${c.slug}`}
-                              className="flex items-center justify-between p-2 rounded-xl hover:bg-white border border-transparent hover:border-gray-200 transition-all cursor-pointer group"
+                              className="flex items-center justify-between p-2 rounded-xl hover:bg-white border border-transparent hover:border-gray-200 transition-all cursor-pointer group min-w-0"
                             >
-                              <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
                                 <img 
                                   src={c.crestUrl || `/badges/${c.slug}.webp`} 
                                   alt="" 
-                                  className="w-8 h-8 object-contain drop-shadow-sm"
+                                  className="w-8 h-8 object-contain drop-shadow-sm shrink-0"
                                   onError={(e) => { (e.target as HTMLImageElement).style.visibility = "hidden" }}
                                 />
-                                <span className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors">{c.name}</span>
+                                <span className="text-sm font-semibold text-gray-900 group-hover:text-blue-600 transition-colors truncate">{c.name}</span>
                               </div>
-                              <span className="text-[11px] font-bold text-gray-500 bg-gray-200/50 px-2 py-1 rounded-md">
+                              <span className="text-[11px] font-bold text-gray-500 bg-gray-200/50 px-2 py-1 rounded-md shrink-0">
                                 {c.distance_km} km
                               </span>
                             </Link>
@@ -301,11 +311,11 @@ export default function ClubDrawer({
 
                 {/* PESTAÑA: HISTORIA */}
                 {activeTab === "historia" && (data?.short_history || data?.history) && (
-                  <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                  <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100 animate-in fade-in duration-150 min-w-0">
                     <div className="flex items-center gap-2 mb-4 text-[11px] font-bold text-gray-600 uppercase tracking-widest">
                       <Clock size={16} className="text-gray-900" /> Reseña Histórica
                     </div>
-                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-medium">
+                    <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap font-medium break-words">
                       {data.short_history || data.history}
                     </p>
                   </div>
@@ -313,22 +323,22 @@ export default function ClubDrawer({
 
                 {/* PESTAÑA: PALMARÉS */}
                 {activeTab === "palmares" && data?.honours && (
-                  <div className="bg-gray-50 rounded-2xl p-6 border border-gray-100 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                    <div className="flex items-center gap-2 mb-5 text-[11px] font-bold text-gray-600 uppercase tracking-widest">
+                  <div className="bg-gray-50 rounded-2xl p-5 border border-gray-100 animate-in fade-in duration-150 min-w-0">
+                    <div className="flex items-center gap-2 mb-4 text-[11px] font-bold text-gray-600 uppercase tracking-widest">
                       <Trophy size={16} className="text-gray-900" /> Títulos Obtenidos
                     </div>
-                    <ul className="space-y-3">
+                    <ul className="space-y-3 min-w-0">
                       {data.honours.map((h, i) => (
-                        <li key={i} className="flex items-start gap-3 bg-white p-3 rounded-xl border border-gray-100 shadow-sm">
-                          <div className="w-8 h-8 rounded-full bg-yellow-100 text-yellow-600 flex items-center justify-center flex-shrink-0 mt-0.5">
+                        <li key={i} className="flex items-start gap-3 bg-white p-3 rounded-xl border border-gray-100 shadow-sm min-w-0">
+                          <div className="w-8 h-8 rounded-full bg-yellow-100 text-yellow-600 flex items-center justify-center shrink-0 mt-0.5">
                             <Trophy size={14} />
                           </div>
-                          <div>
-                            <div className="font-bold text-gray-900 text-sm">
+                          <div className="min-w-0 flex-1">
+                            <div className="font-bold text-gray-900 text-sm break-words">
                               {h.title} {h.count != null && <span className="text-blue-600 ml-1">({h.count})</span>}
                             </div>
                             {h.years && h.years.length > 0 && (
-                              <div className="text-xs font-medium text-gray-500 mt-0.5 leading-relaxed">
+                              <div className="text-xs font-medium text-gray-500 mt-0.5 leading-relaxed break-words">
                                 {h.years.join(", ")}
                               </div>
                             )}
