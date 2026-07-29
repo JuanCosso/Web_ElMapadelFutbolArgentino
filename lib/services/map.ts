@@ -60,55 +60,15 @@ export async function getClubFeatureCollection(): Promise<ClubFeatureCollection>
           ll."name" AS "league",
           ST_X(c."location")::double precision AS "longitude",
           ST_Y(c."location")::double precision AS "latitude",
-          COALESCE(
-            MIN(comp."level"),
-            CASE 
-              WHEN LOWER(c."fullName") LIKE '%colon%santa%fe%' OR LOWER(c."slug") LIKE '%colon%' THEN 3
-              WHEN LOWER(c."fullName") LIKE '%river%plate%' OR LOWER(c."fullName") LIKE '%boca%juniors%' THEN 1
-              WHEN EXISTS (
-                SELECT 1 FROM "Title" t 
-                WHERE t."clubId" = c."id" 
-                AND (
-                  LOWER(t."name") LIKE '%primera%' 
-                  OR LOWER(t."name") LIKE '%libertadores%' 
-                  OR LOWER(t."name") LIKE '%nacional%' 
-                  OR LOWER(t."name") LIKE '%afa%'
-                  OR LOWER(t."name") LIKE '%sudamericana%'
-                  OR LOWER(t."name") LIKE '%profesional%'
-                )
-              ) THEN 3
-              ELSE 8
-            END
-          )::integer AS "level"
+          COALESCE(MIN(comp."level"), 8)::integer AS "level"
         FROM "Club" c
         INNER JOIN "Locality" l ON l."id" = c."localityId"
         INNER JOIN "Province" p ON p."id" = l."provinceId"
         LEFT JOIN "LocalLeague" ll ON ll."id" = c."localLeagueId"
         LEFT JOIN "_ClubToCompetition" c2comp ON c2comp."B" = c."id"
-        LEFT JOIN "Competition" comp ON comp."id" = c2comp."A"
+        LEFT JOIN "Competition" comp ON comp."id" = c2comp."A" AND comp."type" != 'ORGANIZATION' AND comp."level" IS NOT NULL
         GROUP BY c."id", c."slug", c."fullName", c."shortName", c."crestUrl", p."name", l."name", ll."name", c."location"
-        ORDER BY 
-          COALESCE(
-            MIN(comp."level"),
-            CASE 
-              WHEN LOWER(c."fullName") LIKE '%colon%santa%fe%' OR LOWER(c."slug") LIKE '%colon%' THEN 3
-              WHEN LOWER(c."fullName") LIKE '%river%plate%' OR LOWER(c."fullName") LIKE '%boca%juniors%' THEN 1
-              WHEN EXISTS (
-                SELECT 1 FROM "Title" t 
-                WHERE t."clubId" = c."id" 
-                AND (
-                  LOWER(t."name") LIKE '%primera%' 
-                  OR LOWER(t."name") LIKE '%libertadores%' 
-                  OR LOWER(t."name") LIKE '%nacional%' 
-                  OR LOWER(t."name") LIKE '%afa%'
-                  OR LOWER(t."name") LIKE '%sudamericana%'
-                  OR LOWER(t."name") LIKE '%profesional%'
-                )
-              ) THEN 3
-              ELSE 8
-            END
-          ) DESC, 
-          c."fullName" ASC
+        ORDER BY COALESCE(MIN(comp."level"), 8) DESC, c."fullName" ASC
       `;
 
       if (rows && rows.length > 0) {

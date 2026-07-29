@@ -579,39 +579,41 @@ export default function ClubManagerPage() {
             <section style={s.section}>
               <h4 style={s.sectionTitle}>Torneos y Categorías Activas</h4>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 10 }}>
-                {competitions.map((c) => (
-                  <label
-                    key={c.id}
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 10,
-                      padding: "8px 12px",
-                      borderRadius: 8,
-                      border: "1px solid #e2e8f0",
-                      background: selectedComps.includes(c.id) ? "#f0f9ff" : "#ffffff",
-                      cursor: "pointer",
-                      fontSize: 13,
-                    }}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={selectedComps.includes(c.id)}
-                      onChange={() =>
-                        setSelectedComps((prev) =>
-                          prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id]
-                        )
-                      }
-                      style={{ width: 16, height: 16 }}
-                    />
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, color: "#0f172a" }}>{c.name}</div>
-                      <div style={{ fontSize: 11, color: "#64748b" }}>
-                        Nivel {c.level ?? "-"} ({c.type})
+                {competitions
+                  .filter((c) => c.type !== "ORGANIZATION" && c.level !== null)
+                  .map((c) => (
+                    <label
+                      key={c.id}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 10,
+                        padding: "8px 12px",
+                        borderRadius: 8,
+                        border: "1px solid #e2e8f0",
+                        background: selectedComps.includes(c.id) ? "#f0f9ff" : "#ffffff",
+                        cursor: "pointer",
+                        fontSize: 13,
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={selectedComps.includes(c.id)}
+                        onChange={() =>
+                          setSelectedComps((prev) =>
+                            prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id]
+                          )
+                        }
+                        style={{ width: 16, height: 16 }}
+                      />
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontWeight: 600, color: "#0f172a" }}>{c.name}</div>
+                        <div style={{ fontSize: 11, color: "#64748b" }}>
+                          Nivel {c.level ?? "-"} ({c.type})
+                        </div>
                       </div>
-                    </div>
-                  </label>
-                ))}
+                    </label>
+                  ))}
               </div>
             </section>
 
@@ -684,14 +686,31 @@ export default function ClubManagerPage() {
                 )}
 
                 <div style={{ display: "flex", gap: 8, marginTop: 4, flexWrap: "wrap" }}>
-                  <input
-                    style={{ ...s.input, flex: 2, minWidth: 160 }}
+                  <select
+                    style={{ ...s.input, flex: 2, minWidth: 200 }}
                     value={newTitleName}
                     onChange={(e) => setNewTitleName(e.target.value)}
-                  />
+                  >
+                    <option value="">-- Seleccionar Torneo Registrado --</option>
+                    <optgroup label="Competencias / Torneos Nacionales e Internacionales">
+                      {competitions.map((c) => (
+                        <option key={c.id} value={c.name}>
+                          {c.name} (Nivel {c.level ?? "-"})
+                        </option>
+                      ))}
+                    </optgroup>
+                    <optgroup label="Ligas Regionales / Locales">
+                      {leagues.map((l) => (
+                        <option key={l.id} value={l.name}>
+                          {l.name}
+                        </option>
+                      ))}
+                    </optgroup>
+                  </select>
                   <input
                     style={{ ...s.input, flex: 1, minWidth: 80 }}
                     type="number"
+                    placeholder="Cantidad"
                     value={newTitleCount}
                     onChange={(e) => setNewTitleCount(e.target.value)}
                   />
