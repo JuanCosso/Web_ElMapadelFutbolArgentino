@@ -97,6 +97,7 @@ export default function CompetitionsAdminPage() {
   const [selectedLeagueForTitles, setSelectedLeagueForTitles] = useState<LocalLeagueItem | null>(null);
   const [leagueClubsForTitles, setLeagueClubsForTitles] = useState<{ id: string; fullName: string; shortName: string | null; slug: string; crestUrl: string | null }[]>([]);
   const [selectedClubForTitle, setSelectedClubForTitle] = useState("");
+  const [clubSearchInModal, setClubSearchInModal] = useState("");
   const [titleNameInput, setTitleNameInput] = useState("");
   const [titleCountInput, setTitleCountInput] = useState(1);
   const [titleSaving, setTitleSaving] = useState(false);
@@ -105,6 +106,7 @@ export default function CompetitionsAdminPage() {
     setSelectedLeagueForTitles(l);
     setTitleNameInput(l.name);
     setSelectedClubForTitle("");
+    setClubSearchInModal("");
     setTitleCountInput(1);
     setTitleModalOpen(true);
     const clubs = await getClubsByLeagueId(l.id);
@@ -1094,19 +1096,60 @@ export default function CompetitionsAdminPage() {
                   <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
                     Seleccionar Club Campeón *
                   </label>
-                  <select
-                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    value={selectedClubForTitle}
-                    onChange={(e) => setSelectedClubForTitle(e.target.value)}
-                    required
-                  >
-                    <option value="">-- Seleccionar Club ({leagueClubsForTitles.length} disponibles) --</option>
-                    {leagueClubsForTitles.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.shortName || c.fullName}
-                      </option>
-                    ))}
-                  </select>
+                  <input
+                    type="text"
+                    placeholder="Filtrar club por nombre..."
+                    className="w-full border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-900 mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    value={clubSearchInModal}
+                    onChange={(e) => setClubSearchInModal(e.target.value)}
+                  />
+                  <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-xl divide-y divide-gray-100 bg-gray-50 p-1">
+                    {leagueClubsForTitles.length === 0 ? (
+                      <div className="p-3 text-xs text-center text-gray-400">Cargando clubes de la liga...</div>
+                    ) : (
+                      leagueClubsForTitles
+                        .filter((c) => {
+                          const q = clubSearchInModal.toLowerCase();
+                          return (
+                            !q ||
+                            c.fullName.toLowerCase().includes(q) ||
+                            (c.shortName && c.shortName.toLowerCase().includes(q))
+                          );
+                        })
+                        .map((c) => {
+                          const isSelected = selectedClubForTitle === c.id;
+                          return (
+                            <div
+                              key={c.id}
+                              onClick={() => setSelectedClubForTitle(c.id)}
+                              className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all ${
+                                isSelected
+                                  ? "bg-blue-600 text-white font-bold shadow-sm"
+                                  : "hover:bg-white text-gray-900 font-medium"
+                              }`}
+                            >
+                              <img
+                                src={c.crestUrl || `/badges/${c.slug}.webp`}
+                                alt=""
+                                className="w-8 h-8 object-contain shrink-0 bg-white rounded-full p-0.5"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.visibility = "hidden";
+                                }}
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="text-xs truncate font-semibold">{c.fullName}</div>
+                                {c.shortName && c.shortName !== c.fullName && (
+                                  <div className={`text-[10px] truncate ${isSelected ? "text-blue-100" : "text-gray-400"}`}>
+                                    {c.shortName}
+                                  </div>
+                                )}
+                              </div>
+                              {isSelected && <span className="text-xs font-bold">✓</span>}
+                            </div>
+                          );
+                        })
+                    )}
+                  </div>
                 </div>
 
                 <div>

@@ -63,6 +63,8 @@ export async function getClubFeatureCollection(): Promise<ClubFeatureCollection>
           COALESCE(
             MIN(comp."level"),
             CASE 
+              WHEN LOWER(c."fullName") LIKE '%colon%santa%fe%' OR LOWER(c."slug") LIKE '%colon%' THEN 3
+              WHEN LOWER(c."fullName") LIKE '%river%plate%' OR LOWER(c."fullName") LIKE '%boca%juniors%' THEN 1
               WHEN EXISTS (
                 SELECT 1 FROM "Title" t 
                 WHERE t."clubId" = c."id" 
@@ -74,7 +76,7 @@ export async function getClubFeatureCollection(): Promise<ClubFeatureCollection>
                   OR LOWER(t."name") LIKE '%sudamericana%'
                   OR LOWER(t."name") LIKE '%profesional%'
                 )
-              ) THEN 2
+              ) THEN 3
               ELSE 8
             END
           )::integer AS "level"
@@ -89,6 +91,8 @@ export async function getClubFeatureCollection(): Promise<ClubFeatureCollection>
           COALESCE(
             MIN(comp."level"),
             CASE 
+              WHEN LOWER(c."fullName") LIKE '%colon%santa%fe%' OR LOWER(c."slug") LIKE '%colon%' THEN 3
+              WHEN LOWER(c."fullName") LIKE '%river%plate%' OR LOWER(c."fullName") LIKE '%boca%juniors%' THEN 1
               WHEN EXISTS (
                 SELECT 1 FROM "Title" t 
                 WHERE t."clubId" = c."id" 
@@ -100,7 +104,7 @@ export async function getClubFeatureCollection(): Promise<ClubFeatureCollection>
                   OR LOWER(t."name") LIKE '%sudamericana%'
                   OR LOWER(t."name") LIKE '%profesional%'
                 )
-              ) THEN 2
+              ) THEN 3
               ELSE 8
             END
           ) DESC, 
