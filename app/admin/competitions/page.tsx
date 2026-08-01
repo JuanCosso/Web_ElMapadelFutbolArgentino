@@ -11,6 +11,8 @@ import {
   deleteLocalLeague,
   autoMergeDuplicateLocalLeagues,
   addClubTitleFromAdmin,
+  setClubTitleCountFromAdmin,
+  mergeDuplicateLeagues,
   getClubsByLeagueId,
   CompetitionItem,
   LocalLeagueItem,
@@ -95,12 +97,26 @@ export default function CompetitionsAdminPage() {
 
   const [titleModalOpen, setTitleModalOpen] = useState(false);
   const [selectedLeagueForTitles, setSelectedLeagueForTitles] = useState<LocalLeagueItem | null>(null);
-  const [leagueClubsForTitles, setLeagueClubsForTitles] = useState<{ id: string; fullName: string; shortName: string | null; slug: string; crestUrl: string | null }[]>([]);
+  const [leagueClubsForTitles, setLeagueClubsForTitles] = useState<{
+    id: string;
+    fullName: string;
+    shortName: string | null;
+    slug: string;
+    crestUrl: string | null;
+    locality?: { name: string; province?: { name: string } } | null;
+    titles?: { id: string; name: string; count: number }[];
+  }[]>([]);
   const [selectedClubForTitle, setSelectedClubForTitle] = useState("");
   const [clubSearchInModal, setClubSearchInModal] = useState("");
   const [titleNameInput, setTitleNameInput] = useState("");
   const [titleCountInput, setTitleCountInput] = useState(1);
   const [titleSaving, setTitleSaving] = useState(false);
+
+  // Estado para la fusión manual de ligas
+  const [mergeModalOpen, setMergeModalOpen] = useState(false);
+  const [sourceLeagueToMerge, setSourceLeagueToMerge] = useState<LocalLeagueItem | null>(null);
+  const [targetLeagueIdToMerge, setTargetLeagueIdToMerge] = useState("");
+  const [mergeSaving, setMergeSaving] = useState(false);
 
   const handleOpenTitleModal = async (l: LocalLeagueItem) => {
     setSelectedLeagueForTitles(l);
@@ -113,20 +129,68 @@ export default function CompetitionsAdminPage() {
     setLeagueClubsForTitles(clubs);
   };
 
-  const handleSaveTitle = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSelectClubInTitleModal = (clubId: string) => {
+    setSelectedClubForTitle(clubId);
+    const club = leagueClubsForTitles.find((c) => c.id === clubId);
+    if (club && selectedLeagueForTitles) {
+      const matchTitle = club.titles?.find(
+        (t) => t.name.toLowerCase().trim() === selectedLeagueForTitles.name.toLowerCase().trim()
+      );
+      setTitleCountInput(matchTitle ? matchTitle.count : 1);
+    }
+  };
+
+  const handleSaveTitle = async (mode: "SET" | "ADD" = "SET") => {
     if (!selectedClubForTitle || !titleNameInput) {
       alert("Selecciona un club e ingresa el nombre del título.");
       return;
     }
     setTitleSaving(true);
-    const res = await addClubTitleFromAdmin(selectedClubForTitle, titleNameInput, Number(titleCountInput));
+    const countToApply = mode === "SET" ? Number(titleCountInput) : 1;
+    const res = await setClubTitleCountFromAdmin(
+      selectedClubForTitle,
+      titleNameInput,
+      countToApply,
+      mode
+    );
     setTitleSaving(false);
     if (res.error) {
       alert(res.error);
     } else {
-      alert("🏆 ¡Título registrado con éxito en el club!");
-      setTitleModalOpen(false);
+      // Recargar clubes de la liga para actualizar las cantidades en tiempo real
+      if (selectedLeagueForTitles) {
+        const updatedClubs = await getClubsByLeagueId(selectedLeagueForTitles.id);
+        setLeagueClubsForTitles(updatedClubs);
+      }
+      refreshAllData();
+    }
+  };
+
+  const handleOpenMergeModal = (l: LocalLeagueItem) => {
+    setSourceLeagueToMerge(l);
+    setTargetLeagueIdToMerge("");
+    setMergeModalOpen(true);
+  };
+
+  const handleExecuteMerge = async () => {
+    if (!sourceLeagueToMerge || !targetLeagueIdToMerge) {
+      alert("Selecciona la liga destino hacia donde transferir los clubes.");
+      return;
+    }
+    const targetLeague = localLeagues.find((l) => l.id === targetLeagueIdToMerge);
+    if (!confirm(`¿Confirmas fusionar "${sourceLeagueToMerge.name}" hacia "${targetLeague?.name}"?\nTodos los clubes de "${sourceLeagueToMerge.name}" se transferirán a "${targetLeague?.name}". Sus provincias reales (localidades) se mantendrán intactas.`)) {
+      return;
+    }
+
+    setMergeSaving(true);
+    const res = await mergeDuplicateLeagues(targetLeagueIdToMerge, sourceLeagueToMerge.id);
+    setMergeSaving(false);
+
+    if (res.error) {
+      alert(res.error);
+    } else {
+      alert(`🔀 ¡Fusión realizada con éxito! Los clubes ahora pertenecen a "${targetLeague?.name}".`);
+      setMergeModalOpen(false);
       refreshAllData();
     }
   };
@@ -1063,13 +1127,13 @@ export default function CompetitionsAdminPage() {
           </>
         )}
 
-        {/* Modal de Carga Rápida de Títulos */}
+        {/* Modal de Carga de Títulos */}
         {titleModalOpen && selectedLeagueForTitles && (
           <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
             <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl border border-gray-100 space-y-4">
               <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <div className="font-bold text-gray-900 text-base flex items-center gap-2">
-                  <span>🏆</span> Asignar Título a un Club
+                <div className="font-bold text-gray-900 text-base">
+                  Asignar Título a un Club
                 </div>
                 <button
                   onClick={() => setTitleModalOpen(false)}
@@ -1079,7 +1143,13 @@ export default function CompetitionsAdminPage() {
                 </button>
               </div>
 
-              <form onSubmit={handleSaveTitle} className="space-y-4">
+              <form
+                onSubmit={async (e) => {
+                  e.preventDefault();
+                  await handleSaveTitle("SET");
+                }}
+                className="space-y-4"
+              >
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
                     Liga / Torneo
@@ -1118,10 +1188,15 @@ export default function CompetitionsAdminPage() {
                         })
                         .map((c) => {
                           const isSelected = selectedClubForTitle === c.id;
+                          const titleMatch = c.titles?.find(
+                            (t) => t.name.toLowerCase().trim() === selectedLeagueForTitles.name.toLowerCase().trim()
+                          );
+                          const titleCount = titleMatch ? titleMatch.count : 0;
+
                           return (
                             <div
                               key={c.id}
-                              onClick={() => setSelectedClubForTitle(c.id)}
+                              onClick={() => handleSelectClubInTitleModal(c.id)}
                               className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all ${
                                 isSelected
                                   ? "bg-blue-600 text-white font-bold shadow-sm"
@@ -1144,7 +1219,14 @@ export default function CompetitionsAdminPage() {
                                   </div>
                                 )}
                               </div>
-                              {isSelected && <span className="text-xs font-bold">✓</span>}
+
+                              <span
+                                className={`text-xs font-medium px-2 py-0.5 rounded ${
+                                  isSelected ? "bg-blue-700 text-white" : "bg-gray-200 text-gray-700"
+                                }`}
+                              >
+                                {titleCount} títulos
+                              </span>
                             </div>
                           );
                         })
@@ -1154,28 +1236,14 @@ export default function CompetitionsAdminPage() {
 
                 <div>
                   <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
-                    Nombre del Título / Campeonato *
-                  </label>
-                  <input
-                    type="text"
-                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={titleNameInput}
-                    onChange={(e) => setTitleNameInput(e.target.value)}
-                    placeholder="Ej: Liga Santafesina de Fútbol"
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
-                    Cantidad de Títulos a Añadir
+                    Cantidad de Títulos
                   </label>
                   <input
                     type="number"
-                    min="1"
+                    min="0"
                     className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={titleCountInput}
-                    onChange={(e) => setTitleCountInput(Math.max(1, parseInt(e.target.value) || 1))}
+                    onChange={(e) => setTitleCountInput(Math.max(0, parseInt(e.target.value) || 0))}
                   />
                 </div>
 
@@ -1185,7 +1253,7 @@ export default function CompetitionsAdminPage() {
                     disabled={titleSaving}
                     className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2.5 px-4 rounded-xl shadow-sm transition-colors text-sm"
                   >
-                    {titleSaving ? "Guardando..." : "🏆 Guardar Título en el Club"}
+                    {titleSaving ? "Guardando..." : "Guardar Título en el Club"}
                   </button>
                   <button
                     type="button"

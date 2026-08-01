@@ -225,6 +225,7 @@ export default function ClubManagerPage() {
 
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState<ClubAdminItem[]>([]);
+  const [selectedProvinceFilter, setSelectedProvinceFilter] = useState("");
 
   // Estado del Formulario
   const [clubId, setClubId] = useState("");
@@ -502,46 +503,67 @@ export default function ClubManagerPage() {
         {/* Buscador */}
         {mode === "IDLE" && (
           <div style={s.section}>
-            <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 10, marginBottom: 20, flexWrap: "wrap", alignItems: "center" }}>
               <input
-                style={{ ...s.input, flex: 1, fontSize: 15, padding: "10px 14px" }}
+                style={{ ...s.input, flex: 1, minWidth: 240, fontSize: 14, padding: "10px 14px" }}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Buscar club por nombre, apodo o ciudad..."
               />
+
+              <select
+                style={{ ...s.select, width: "auto", fontSize: 13, padding: "10px 12px" }}
+                value={selectedProvinceFilter}
+                onChange={(e) => setSelectedProvinceFilter(e.target.value)}
+              >
+                <option value="">-- Todas las provincias --</option>
+                {provinces.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+
               <button style={s.btnPrimary} onClick={handleCreateNew}>
                 + Nuevo Club
               </button>
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {searchResults.map((c) => (
-                <div key={c.id} style={s.resultItem} onClick={() => handleEdit(c)}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-                    <img
-                      src={c.crestUrl || `/badges/${c.slug}.webp`}
-                      alt=""
-                      style={{ width: 32, height: 32, objectFit: "contain", borderRadius: 4 }}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).style.visibility = "hidden";
-                      }}
-                    />
-                    <div>
-                      <div style={{ fontWeight: 600, fontSize: 15, color: "#0f172a" }}>
-                        {highlight(c.fullName, searchQuery)}
-                      </div>
-                      <div style={{ fontSize: 13, color: "#64748b" }}>
-                        {c.locality?.name}, {c.locality?.province?.name}
+              {searchResults
+                .filter((c) => {
+                  if (!selectedProvinceFilter) return true;
+                  return c.locality?.provinceId === selectedProvinceFilter;
+                })
+                .map((c) => (
+                  <div key={c.id} style={s.resultItem} onClick={() => handleEdit(c)}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                      <img
+                        src={c.crestUrl || `/badges/${c.slug}.webp`}
+                        alt=""
+                        style={{ width: 32, height: 32, objectFit: "contain", borderRadius: 4 }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.visibility = "hidden";
+                        }}
+                      />
+                      <div>
+                        <div style={{ fontWeight: 600, fontSize: 15, color: "#0f172a" }}>
+                          {highlight(c.fullName, searchQuery)}
+                        </div>
+                        <div style={{ fontSize: 13, color: "#64748b" }}>
+                          {c.locality?.name}, {c.locality?.province?.name}
+                        </div>
                       </div>
                     </div>
+                    <span style={{ fontSize: 12, color: "#94a3b8", fontFamily: "monospace" }}>{c.slug}</span>
                   </div>
-                  <span style={{ fontSize: 12, color: "#94a3b8", fontFamily: "monospace" }}>{c.slug}</span>
-                </div>
-              ))}
-              {searchQuery.length >= 2 && searchResults.length === 0 && (
-                <div style={{ padding: 20, textAlign: "center", color: "#64748b" }}>
-                  No se encontraron clubes para la búsqueda realizada.
-                </div>
-              )}
+                ))}
+              {searchQuery.length >= 2 &&
+                searchResults.filter((c) => !selectedProvinceFilter || c.locality?.provinceId === selectedProvinceFilter).length === 0 && (
+                  <div style={{ padding: 20, textAlign: "center", color: "#64748b" }}>
+                    No se encontraron clubes para la búsqueda realizada.
+                  </div>
+                )}
             </div>
           </div>
         )}

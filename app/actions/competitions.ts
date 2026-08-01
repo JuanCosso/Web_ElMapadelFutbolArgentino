@@ -288,35 +288,69 @@ export async function autoMergeDuplicateLocalLeagues() {
   }
 }
 
-export async function addClubTitleFromAdmin(clubId: string, titleName: string, count: number = 1) {
+export async function setClubTitleCountFromAdmin(
+  clubId: string,
+  titleName: string,
+  count: number,
+  mode: "SET" | "ADD" = "SET"
+) {
   try {
     if (!clubId || !titleName) return { error: "Faltan datos requeridos para registrar el título." };
+    const cleanTitle = titleName.trim();
+    const finalCount = Math.max(0, count);
+
     const existing = await prisma.title.findFirst({
-      where: { clubId, name: titleName },
+      where: { clubId, name: cleanTitle },
     });
 
+    if (finalCount === 0 && existing) {
+      // Si la cantidad se fija en 0, eliminar el título
+      await prisma.title.delete({ where: { id: existing.id } });
+      return { success: true };
+    }
+
     if (existing) {
+      const newCount = mode === "SET" ? finalCount : (existing.count || 1) + finalCount;
       await prisma.title.update({
         where: { id: existing.id },
-        data: { count: (existing.count || 1) + count },
+        data: { count: newCount },
       });
-    } else {
+    } else if (finalCount > 0) {
       await prisma.title.create({
-        data: { clubId, name: titleName, count },
+        data: { clubId, name: cleanTitle, count: finalCount },
       });
     }
     return { success: true };
   } catch (error: unknown) {
     const err = error as { message?: string };
-    return { error: err.message || "Error al registrar el título." };
+    return { error: err.message || "Error al actualizar el título." };
   }
+}
+
+export async function addClubTitleFromAdmin(clubId: string, titleName: string, count: number = 1) {
+  return setClubTitleCountFromAdmin(clubId, titleName, count, "ADD");
 }
 
 export async function getClubsByLeagueId(localLeagueId: string) {
   try {
     const clubs = await prisma.club.findMany({
       where: { localLeagueId },
-      select: { id: true, fullName: true, shortName: true, slug: true, crestUrl: true },
+      select: {
+        id: true,
+        fullName: true,
+        shortName: true,
+        slug: true,
+        crestUrl: true,
+        locality: {
+          select: {
+            name: true,
+            province: { select: { name: true } }
+          }
+        },
+        titles: {
+          select: { id: true, name: true, count: true }
+        }
+      },
       orderBy: { fullName: "asc" },
     });
     return clubs;
