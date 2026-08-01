@@ -419,14 +419,20 @@ export default function ClubManagerPage() {
     try {
       let finalBadgeUrl = badgeUrl || `/badges/${finalSlug}.webp`;
       if (badgeData) {
-        const uploadRes = await fetch("/api/upload-badge", {
+        const uploadRes = await fetch("/api/upload-logo", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ club_id: finalSlug, data: badgeData }),
+          body: JSON.stringify({ key: finalSlug, folder: "badges", data: badgeData }),
         });
-        const uploadJson = await uploadRes.json();
-        if (!uploadRes.ok) throw new Error(uploadJson.error);
-        finalBadgeUrl = uploadJson.badge_url;
+        const uploadText = await uploadRes.text();
+        let uploadJson: { error?: string; logo_url?: string; badge_url?: string } = {};
+        try {
+          uploadJson = JSON.parse(uploadText);
+        } catch {
+          throw new Error("El servidor devolvió un error inesperado al subir la imagen del escudo.");
+        }
+        if (!uploadRes.ok) throw new Error(uploadJson.error || "Error al subir la imagen del escudo.");
+        finalBadgeUrl = uploadJson.logo_url || uploadJson.badge_url || finalBadgeUrl;
       }
 
       const res = await fetch("/admin/clubs/upsert", {
@@ -455,8 +461,14 @@ export default function ClubManagerPage() {
         }),
       });
 
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      const resText = await res.text();
+      let data: { error?: string; slug?: string } = {};
+      try {
+        data = JSON.parse(resText);
+      } catch {
+        throw new Error("El servidor devolvió un error inesperado al guardar los datos del club.");
+      }
+      if (!res.ok) throw new Error(data.error || "Fallo al guardar el club.");
 
       // Actualizar datos del formulario para incluir nuevas localidades
       getAdminFormData().then((formData) => {
