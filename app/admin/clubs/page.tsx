@@ -68,12 +68,18 @@ function AutoField({
   options,
   onChange,
   disabled = false,
+  allowCustom = false,
+  customValue = "",
+  onCustomChange,
 }: {
   label: string;
   valueId: string;
   options: Option[];
   onChange: (id: string) => void;
   disabled?: boolean;
+  allowCustom?: boolean;
+  customValue?: string;
+  onCustomChange?: (val: string) => void;
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -84,12 +90,20 @@ function AutoField({
   useEffect(() => {
     let ignore = false;
     Promise.resolve().then(() => {
-      if (!ignore) setQuery(selectedName);
+      if (!ignore) {
+        if (valueId && selectedName) {
+          setQuery(selectedName);
+        } else if (allowCustom && customValue) {
+          setQuery(customValue);
+        } else if (!valueId && !customValue) {
+          setQuery("");
+        }
+      }
     });
     return () => {
       ignore = true;
     };
-  }, [selectedName, valueId]);
+  }, [selectedName, valueId, customValue, allowCustom]);
 
   useEffect(() => {
     const h = (e: MouseEvent) => {
@@ -100,6 +114,8 @@ function AutoField({
   }, []);
 
   const matches = options.filter((o) => norm(o.name).includes(norm(query))).slice(0, 10);
+  const exactMatch = options.some((o) => norm(o.name) === norm(query.trim()));
+  const displayVal = open ? query : (selectedName || (allowCustom ? customValue : ""));
 
   return (
     <div ref={wrap} style={{ position: "relative", display: "flex", flexDirection: "column", gap: 5 }}>
@@ -110,22 +126,31 @@ function AutoField({
           backgroundColor: disabled ? "#f8fafc" : "#ffffff",
           color: disabled ? "#94a3b8" : "#0f172a",
         }}
-        value={open ? query : selectedName}
+        value={displayVal}
         onChange={(e) => {
-          setQuery(e.target.value);
+          const val = e.target.value;
+          setQuery(val);
           setOpen(true);
-          onChange("");
+
+          const matchOpt = options.find((o) => norm(o.name) === norm(val.trim()));
+          if (matchOpt) {
+            onChange(matchOpt.id);
+            if (allowCustom && onCustomChange) onCustomChange("");
+          } else {
+            onChange("");
+            if (allowCustom && onCustomChange) onCustomChange(val);
+          }
         }}
         onFocus={() => {
           if (!disabled) {
-            setQuery("");
+            setQuery(displayVal);
             setOpen(true);
           }
         }}
         autoComplete="off"
         disabled={disabled}
       />
-      {open && !disabled && matches.length > 0 && (
+      {open && !disabled && (matches.length > 0 || (allowCustom && query.trim() !== "" && !exactMatch)) && (
         <div style={s.dropdown}>
           {matches.map((m) => (
             <div
@@ -134,12 +159,33 @@ function AutoField({
               onMouseDown={(e) => {
                 e.preventDefault();
                 onChange(m.id);
+                if (allowCustom && onCustomChange) onCustomChange("");
+                setQuery(m.name);
                 setOpen(false);
               }}
             >
               {m.name}
             </div>
           ))}
+          {allowCustom && query.trim() !== "" && !exactMatch && (
+            <div
+              style={{
+                ...s.dropItem,
+                color: "#2563eb",
+                fontWeight: 600,
+                borderTop: matches.length > 0 ? "1px solid #e2e8f0" : "none",
+              }}
+              onMouseDown={(e) => {
+                e.preventDefault();
+                onChange("");
+                if (onCustomChange) onCustomChange(query.trim());
+                setQuery(query.trim());
+                setOpen(false);
+              }}
+            >
+              ➕ Usar/Crear ciudad &quot;{query.trim()}&quot;
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -186,6 +232,7 @@ export default function ClubManagerPage() {
   const [fullName, setFullName] = useState("");
   const [provinceId, setProvinceId] = useState("");
   const [localityId, setLocalityId] = useState("");
+  const [localityCustom, setLocalityCustom] = useState("");
   const [isDirectAfa, setIsDirectAfa] = useState(false);
   const [leagueId, setLeagueId] = useState("");
   const [manualSlug, setManualSlug] = useState("");
@@ -262,6 +309,7 @@ export default function ClubManagerPage() {
     setFullName(club.fullName);
     setProvinceId(club.locality?.provinceId || "");
     setLocalityId(club.localityId || "");
+    setLocalityCustom("");
 
     if (!club.localLeagueId) {
       setIsDirectAfa(true);
@@ -308,6 +356,7 @@ export default function ClubManagerPage() {
     setFullName("");
     setProvinceId("");
     setLocalityId("");
+    setLocalityCustom("");
     setLeagueId("");
     setIsDirectAfa(false);
     setManualSlug("");
@@ -360,7 +409,7 @@ export default function ClubManagerPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !localityId || !lat || !lng || (!isDirectAfa && !leagueId)) {
+    if (!name || (!localityId && !localityCustom.trim()) || !lat || !lng || (!isDirectAfa && !leagueId)) {
       setStatus({ type: "error", msg: "Completá todos los campos obligatorios (*)" });
       return;
     }
@@ -388,7 +437,9 @@ export default function ClubManagerPage() {
           slug: finalSlug,
           name,
           fullName,
-          localityId,
+          provinceId,
+          localityId: localityId || null,
+          localityCustom: localityCustom || null,
           localLeagueId: isDirectAfa ? null : leagueId,
           lat: parseFloat(lat),
           lng: parseFloat(lng),
@@ -406,6 +457,14 @@ export default function ClubManagerPage() {
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
+
+      // Actualizar datos del formulario para incluir nuevas localidades
+      getAdminFormData().then((formData) => {
+        setProvinces(formData.provinces);
+        setLocalities(formData.localities);
+        setLeagues(formData.leagues);
+        setCompetitions(formData.competitions as CompetitionOption[]);
+      });
 
       setStatus({ type: "success", msg: `Club guardado exitosamente. Identificador: ${data.slug}` });
 
@@ -497,6 +556,7 @@ export default function ClubManagerPage() {
                   onChange={(id) => {
                     setProvinceId(id);
                     setLocalityId("");
+                    setLocalityCustom("");
                   }}
                 />
                 <AutoField
@@ -504,6 +564,9 @@ export default function ClubManagerPage() {
                   valueId={localityId}
                   options={filteredLocalities}
                   onChange={setLocalityId}
+                  allowCustom
+                  customValue={localityCustom}
+                  onCustomChange={setLocalityCustom}
                 />
               </div>
             </section>

@@ -2,15 +2,53 @@ import { NextResponse } from "next/server";
 // ACÁ ESTABA EL ERROR: Faltaban las llaves en { prisma }
 import { prisma } from "@/lib/prisma";
 
+function slugify(s: string) {
+  return (s || "")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/\p{Diacritic}/gu, "")
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+}
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
     const { 
-      id, slug, name, fullName, localityId, localLeagueId, lat, lng, competitions, badge_url,
+      id, slug, name, fullName, provinceId, localityId, localityCustom, localLeagueId, lat, lng, competitions, badge_url,
       nickname, foundation, stadiumName, stadiumCapacity, history, verified, titles
     } = body;
 
-    if (!name || !localityId || !lat || !lng) {
+    let targetLocalityId = localityId || null;
+
+    if (!targetLocalityId && localityCustom && provinceId && lat !== undefined && lng !== undefined) {
+      const locSlug = slugify(localityCustom);
+      const existing = await prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM "Locality" 
+        WHERE "provinceId" = CAST(${provinceId} AS UUID) 
+          AND "slug" = ${locSlug} 
+        LIMIT 1
+      `;
+      if (existing.length > 0) {
+        targetLocalityId = existing[0].id;
+      } else {
+        const created = await prisma.$queryRaw<{ id: string }[]>`
+          INSERT INTO "Locality" ("id", "provinceId", "name", "slug", "type", "location")
+          VALUES (
+            gen_random_uuid(),
+            CAST(${provinceId} AS UUID),
+            ${String(localityCustom).trim()},
+            ${locSlug},
+            'CITY'::"LocalityType",
+            ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326)
+          )
+          RETURNING id;
+        `;
+        targetLocalityId = created[0].id;
+      }
+    }
+
+    if (!name || !targetLocalityId || lat === undefined || lat === null || lng === undefined || lng === null) {
       return NextResponse.json({ error: "Faltan campos obligatorios" }, { status: 400 });
     }
 
@@ -27,7 +65,7 @@ export async function POST(req: Request) {
           "fullName" = ${dbFullName},
           "shortName" = ${name},
           "slug" = ${slug},
-          "localityId" = CAST(${localityId} AS UUID),
+          "localityId" = CAST(${targetLocalityId} AS UUID),
           "localLeagueId" = CAST(${dbLeagueId} AS UUID),
           "crestUrl" = ${dbCrestUrl},
           "location" = ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326),
@@ -49,7 +87,7 @@ export async function POST(req: Request) {
         )
         VALUES (
           gen_random_uuid(), ${dbFullName}, ${name}, ${slug}, 
-          CAST(${localityId} AS UUID), CAST(${dbLeagueId} AS UUID), 
+          CAST(${targetLocalityId} AS UUID), CAST(${dbLeagueId} AS UUID), 
           ${dbCrestUrl}, ST_SetSRID(ST_MakePoint(${lng}, ${lat}), 4326), 
           ${dbVerified}, NOW(),
           ${nickname || null}, ${foundation || null}, 
