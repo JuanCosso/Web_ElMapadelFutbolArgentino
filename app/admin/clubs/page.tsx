@@ -227,6 +227,8 @@ export default function ClubManagerPage() {
   const [searchResults, setSearchResults] = useState<ClubAdminItem[]>([]);
   const [selectedProvinceFilter, setSelectedProvinceFilter] = useState("");
 
+
+
   // Estado del Formulario
   const [clubId, setClubId] = useState("");
   const [name, setName] = useState("");
@@ -296,6 +298,8 @@ export default function ClubManagerPage() {
   const leagueName = isDirectAfa ? "afa" : leagues.find((l) => l.id === leagueId)?.name || "";
   const autoSlug = buildId(provName, leagueName, name);
   const finalSlug = manualSlug.trim() || autoSlug;
+
+
 
   const handleCreateNew = () => {
     resetForm();
@@ -523,6 +527,8 @@ export default function ClubManagerPage() {
                   </option>
                 ))}
               </select>
+
+
 
               <button style={s.btnPrimary} onClick={handleCreateNew}>
                 + Nuevo Club
@@ -925,6 +931,8 @@ export default function ClubManagerPage() {
             </div>
           </form>
         )}
+
+
       </div>
     </div>
   );
