@@ -1,6 +1,0 @@
-{
-  "name": "El Mapa del Fútbol Argentino",
-  "description": "El mapa más completo de todo el país, recopilando información de nuestros clubes",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
