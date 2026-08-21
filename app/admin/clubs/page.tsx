@@ -242,7 +242,7 @@ export default function ClubManagerPage() {
   const [selectedComps, setSelectedComps] = useState<string[]>([]);
   const [lat, setLat] = useState("");
   const [lng, setLng] = useState("");
-  const [verified, setVerified] = useState(true);
+  const [verified, setVerified] = useState(false);
 
   // Datos adicionales
   const [nickname, setNickname] = useState("");
@@ -299,8 +299,6 @@ export default function ClubManagerPage() {
   const autoSlug = buildId(provName, leagueName, name);
   const finalSlug = manualSlug.trim() || autoSlug;
 
-
-
   const handleCreateNew = () => {
     resetForm();
     setMode("CREATE");
@@ -327,7 +325,7 @@ export default function ClubManagerPage() {
     setManualSlug(club.slug);
     setSelectedComps(club.competitions.map((c) => c.id));
     setBadgeUrl(club.crestUrl || `/badges/${club.slug}.webp`);
-    setVerified(club.verified ?? true);
+    setVerified(club.verified ?? false);
 
     setNickname(club.nickname || "");
     setFoundation(club.foundation || "");
@@ -368,7 +366,7 @@ export default function ClubManagerPage() {
     setSelectedComps([]);
     setLat("");
     setLng("");
-    setVerified(true);
+    setVerified(false);
     setNickname("");
     setFoundation("");
     setStadiumName("");
@@ -422,24 +420,6 @@ export default function ClubManagerPage() {
     setStatus({ type: "idle", msg: "" });
 
     try {
-      let finalBadgeUrl = badgeUrl || `/badges/${finalSlug}.webp`;
-      if (badgeData) {
-        const uploadRes = await fetch("/api/upload-logo", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ key: finalSlug, folder: "badges", data: badgeData }),
-        });
-        const uploadText = await uploadRes.text();
-        let uploadJson: { error?: string; logo_url?: string; badge_url?: string } = {};
-        try {
-          uploadJson = JSON.parse(uploadText);
-        } catch {
-          throw new Error("El servidor devolvió un error inesperado al subir la imagen del escudo.");
-        }
-        if (!uploadRes.ok) throw new Error(uploadJson.error || "Error al subir la imagen del escudo.");
-        finalBadgeUrl = uploadJson.logo_url || uploadJson.badge_url || finalBadgeUrl;
-      }
-
       const res = await fetch("/admin/clubs/upsert", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -455,7 +435,8 @@ export default function ClubManagerPage() {
           lat: parseFloat(lat),
           lng: parseFloat(lng),
           competitions: selectedComps,
-          badge_url: finalBadgeUrl,
+          badge_url: badgeUrl,
+          badgeData: badgeData || null,
           nickname,
           foundation: foundation || null,
           stadiumName,
