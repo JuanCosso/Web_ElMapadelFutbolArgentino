@@ -442,10 +442,16 @@ export default function CompetitionsAdminPage() {
   const [selectedLevelFilter, setSelectedLevelFilter] = useState("");
   const [sortBy, setSortBy] = useState<"teams-desc" | "teams-asc" | "name-asc" | "name-desc" | "level-asc" | "level-desc">("level-asc");
 
+  function normSearch(s: string) {
+    return (s || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  }
+
+  const qNorm = normSearch(searchQuery);
+
   const filteredCompetitions = competitions.filter((c) => {
     const matchesSearch =
-      c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      c.slug.toLowerCase().includes(searchQuery.toLowerCase());
+      normSearch(c.name).includes(qNorm) ||
+      normSearch(c.slug).includes(qNorm);
     const matchesType = !selectedTypeFilter || c.type === selectedTypeFilter;
     const matchesLevel = !selectedLevelFilter || String(c.level) === selectedLevelFilter;
     return matchesSearch && matchesType && matchesLevel;
@@ -460,9 +466,9 @@ export default function CompetitionsAdminPage() {
 
   const filteredLeagues = localLeagues.filter((l) => {
     const matchesSearch =
-      l.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      l.slug.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      (l.province?.name && l.province.name.toLowerCase().includes(searchQuery.toLowerCase()));
+      normSearch(l.name).includes(qNorm) ||
+      normSearch(l.slug).includes(qNorm) ||
+      (l.province?.name && normSearch(l.province.name).includes(qNorm));
     const matchesProv = !selectedProvinceFilter || l.provinceId === selectedProvinceFilter || l.province?.name === selectedProvinceFilter;
     return matchesSearch && matchesProv;
   }).sort((a, b) => {

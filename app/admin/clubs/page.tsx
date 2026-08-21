@@ -15,7 +15,7 @@ function slugify(s: string) {
 }
 
 function norm(s: string) {
-  return s.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  return (s || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
 
 function buildId(province: string, league: string, name: string) {

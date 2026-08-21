@@ -43,6 +43,7 @@ export type SearchItem =
       club_id: string;
       badge_url?: string;
       full_name?: string;
+      nickname?: string;
       province?: string;
       city?: string;
       league?: string;
@@ -61,6 +62,8 @@ export type ClubProperties = {
   full_name?: string;
   fullName?: string;
   nombre_completo?: string;
+  nickname?: string;
+  apodo?: string;
   club_id?: string | number;
   id?: string | number;
   clubId?: string | number;
@@ -81,7 +84,7 @@ function normalize(s: string) {
   return (s || "")
     .toLowerCase()
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\p{Diacritic}/gu, "")
     .trim();
 }
 
@@ -130,6 +133,7 @@ export function buildSearchIndex(features: ClubFeature[], leagues: SearchItem[] 
       const league = String(p.league || p.liga || "");
       const name = String(p.name || p.nombre || "Club");
       const full_name = p.full_name || p.fullName || p.nombre_completo || undefined;
+      const nickname = p.nickname || p.apodo || undefined;
       const level = p.level !== undefined ? Number(p.level) : 8;
 
       const club_id = String(p.club_id || p.id || p.clubId || p.slug || "");
@@ -160,6 +164,7 @@ export function buildSearchIndex(features: ClubFeature[], leagues: SearchItem[] 
         club_id: club_id || `${name}-${city}-${province}`,
         label: name,
         full_name: full_name ? String(full_name) : undefined,
+        nickname: nickname ? String(nickname) : undefined,
         sublabel: [city, province].filter(Boolean).join(", "),
         center: c,
         badge_url: badge_url ? String(badge_url) : undefined,
@@ -226,7 +231,7 @@ export function searchItems(index: SearchItem[], query: string, limit = 400): Se
 
     const provClubs = clubs
       .filter((c) => c.province === provName)
-      .sort((a, b) => a.label.localeCompare(b.label));
+      .sort((a, b) => (a.level ?? 8) - (b.level ?? 8) || a.label.localeCompare(b.label));
 
     return [exactProv, ...provCities, ...provClubs];
   }
@@ -241,7 +246,8 @@ export function searchItems(index: SearchItem[], query: string, limit = 400): Se
     if (item.type === "club") {
       const sub = normalize(item.sublabel || "");
       const full = normalize(item.full_name || "");
-      return contains(label) || contains(full) || contains(sub);
+      const nick = normalize(item.nickname || "");
+      return contains(label) || contains(full) || contains(sub) || contains(nick);
     }
 
     if (item.type === "league") {
@@ -257,14 +263,16 @@ export function searchItems(index: SearchItem[], query: string, limit = 400): Se
     return contains(label);
   };
 
-  const scoreText = (field: string, wStarts: number, wIncl: number) => {
+  const scoreText = (field: string, wStarts: number, wWordMatch: number, wIncl: number) => {
     if (!field) return 0;
     if (starts(field)) return wStarts;
+    const words = field.split(/\s+/);
+    if (words.some((w) => w.startsWith(q))) return wWordMatch;
     if (contains(field)) return wIncl;
     return 0;
   };
 
-  // 2) Score + threshold + bonificación por jerarquía de torneo
+  // 2) Score + threshold + bonificación fuerte por jerarquía de torneo
   const scored = index
     .filter(passGate)
     .map((item) => {
@@ -274,26 +282,30 @@ export function searchItems(index: SearchItem[], query: string, limit = 400): Se
       if (item.type === "club") {
         const sub = normalize(item.sublabel || "");
         const full = normalize(item.full_name || "");
-        score = Math.max(score, scoreText(label, 260, 170));
-        score = Math.max(score, scoreText(full, 200, 130));
-        score = Math.max(score, scoreText(sub, 70, 40));
+        const nick = normalize(item.nickname || "");
 
-        // 🌟 Bonificación por jerarquía de torneo (menor nivel = mayor categoría)
+        score = Math.max(score, scoreText(label, 320, 280, 150));
+        score = Math.max(score, scoreText(full, 280, 250, 130));
+        score = Math.max(score, scoreText(nick, 260, 240, 120));
+        score = Math.max(score, scoreText(sub, 70, 60, 40));
+
+        // 🌟 Bonificación fuerte por jerarquía de torneo (menor nivel = mayor categoría)
+        // Nivel 1: +800 pts, Nivel 2: +700 pts, Nivel 3: +600 pts... Nivel 8: +100 pts
         const lvl = Math.min(Math.max(item.level ?? 8, 1), 8);
-        const hierarchyBonus = (10 - lvl) * 20; // Nivel 1: +180 pts, Nivel 2: +160 pts... Nivel 8: +40 pts
-        score += 25 + hierarchyBonus;
+        const hierarchyBonus = (9 - lvl) * 100;
+        score += hierarchyBonus;
       } else if (item.type === "league") {
         const sub = normalize(item.sublabel || "");
-        score = Math.max(score, scoreText(label, 200, 140));
-        score = Math.max(score, scoreText(sub, 80, 50));
-        score += 30;
+        score = Math.max(score, scoreText(label, 220, 180, 140));
+        score = Math.max(score, scoreText(sub, 80, 60, 50));
+        score += 50;
       } else if (item.type === "city") {
         const sub = normalize(item.sublabel || "");
-        score = Math.max(score, scoreText(label, 170, 110));
-        score = Math.max(score, scoreText(sub, 90, 55));
-        score += 10;
+        score = Math.max(score, scoreText(label, 190, 150, 110));
+        score = Math.max(score, scoreText(sub, 90, 70, 55));
+        score += 20;
       } else {
-        score = Math.max(score, scoreText(label, 150, 95));
+        score = Math.max(score, scoreText(label, 170, 130, 95));
       }
 
       return { item, score };

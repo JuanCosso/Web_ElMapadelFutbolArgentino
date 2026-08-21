@@ -54,6 +54,7 @@ export async function getClubFeatureCollection(): Promise<ClubFeatureCollection>
           c."slug",
           c."fullName",
           c."shortName",
+          c."nickname",
           c."crestUrl",
           p."name" AS "province",
           l."name" AS "city",
@@ -65,10 +66,10 @@ export async function getClubFeatureCollection(): Promise<ClubFeatureCollection>
         INNER JOIN "Locality" l ON l."id" = c."localityId"
         INNER JOIN "Province" p ON p."id" = l."provinceId"
         LEFT JOIN "LocalLeague" ll ON ll."id" = c."localLeagueId"
-        LEFT JOIN "_ClubToCompetition" c2comp ON c2comp."B" = c."id"
-        LEFT JOIN "Competition" comp ON comp."id" = c2comp."A" AND comp."type" != 'ORGANIZATION' AND comp."level" IS NOT NULL
-        GROUP BY c."id", c."slug", c."fullName", c."shortName", c."crestUrl", p."name", l."name", ll."name", c."location"
-        ORDER BY COALESCE(MIN(comp."level"), 8) DESC, c."fullName" ASC
+        LEFT JOIN "_ClubToCompetition" c2comp ON c2comp."A" = c."id"
+        LEFT JOIN "Competition" comp ON comp."id" = c2comp."B" AND comp."type" != 'ORGANIZATION' AND comp."level" IS NOT NULL
+        GROUP BY c."id", c."slug", c."fullName", c."shortName", c."nickname", c."crestUrl", p."name", l."name", ll."name", c."location"
+        ORDER BY COALESCE(MIN(comp."level"), 8) ASC, c."fullName" ASC
       `;
 
       if (rows && rows.length > 0) {
@@ -84,6 +85,7 @@ export async function getClubFeatureCollection(): Promise<ClubFeatureCollection>
               club_id: club.slug,
               name: club.shortName ?? club.fullName,
               full_name: club.fullName,
+              nickname: club.nickname || undefined,
               province: club.province,
               city: club.city,
               league: club.league,
