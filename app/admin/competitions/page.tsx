@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { AdminNav } from "@/components/admin/AdminNav";
+import React, { useState, useEffect, useRef } from "react";
+import { AdminLayout, useAdminTheme } from "@/components/admin/AdminLayout";
 import {
   getCompetitions,
   upsertCompetition,
@@ -9,16 +9,33 @@ import {
   getLocalLeagues,
   upsertLocalLeague,
   deleteLocalLeague,
-  autoMergeDuplicateLocalLeagues,
-  addClubTitleFromAdmin,
   setClubTitleCountFromAdmin,
-  mergeDuplicateLeagues,
   getClubsByLeagueId,
+  getClubsByCompetitionId,
+  addClubToCompetition,
+  removeClubFromCompetition,
+  addClubToLocalLeague,
+  removeClubFromLocalLeague,
+  searchClubsForSelection,
+  getCompetitionChampions,
+  deleteTitleById,
   CompetitionItem,
   LocalLeagueItem,
 } from "@/app/actions/competitions";
 import { CompetitionType } from "@prisma/client";
 import { getAdminFormData } from "@/app/actions/admin";
+import {
+  Trophy,
+  Users,
+  Award,
+  Edit3,
+  Trash2,
+  Search,
+  Globe,
+  Calendar,
+  X,
+  Upload,
+} from "lucide-react";
 
 function slugify(s: string) {
   return (s || "")
@@ -27,6 +44,10 @@ function slugify(s: string) {
     .replace(/\p{Diacritic}/gu, "")
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+function normSearch(s: string) {
+  return (s || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
 }
 
 async function imageFileToWebp256(file: File): Promise<string> {
@@ -55,6 +76,8 @@ async function imageFileToWebp256(file: File): Promise<string> {
 }
 
 export default function CompetitionsAdminPage() {
+  const theme = useAdminTheme();
+
   const [activeTab, setActiveTab] = useState<"COMPETITIONS" | "REGIONAL_LEAGUES">("COMPETITIONS");
 
   const [competitions, setCompetitions] = useState<CompetitionItem[]>([]);
@@ -69,13 +92,12 @@ export default function CompetitionsAdminPage() {
   const [compName, setCompName] = useState("");
   const [compManualSlug, setCompManualSlug] = useState("");
   const [compType, setCompType] = useState<CompetitionType>("LEAGUE");
-  const [compLevel, setCompLevel] = useState<string>(""); // 🟢 Empezamos vacío por defecto
+  const [compLevel, setCompLevel] = useState<string>("");
   const [compParentId, setCompParentId] = useState<string>("");
   const [compFoundation, setCompFoundation] = useState<string>("");
   const [compLogoUrl, setCompLogoUrl] = useState<string>("");
   const [compLogoData, setCompLogoData] = useState<string | null>(null);
-  const [compLogoFileName, setCompLogoFileName] = useState("");
-  const compFileInputRef = useRef<HTMLInputElement>(null);
+  const compLogoFileRef = useRef<HTMLInputElement>(null);
 
   const [leagueMode, setLeagueMode] = useState<"IDLE" | "CREATE" | "EDIT">("IDLE");
   const [leagueEditingId, setLeagueEditingId] = useState<string | null>(null);
@@ -86,8 +108,7 @@ export default function CompetitionsAdminPage() {
   const [leagueFoundation, setLeagueFoundation] = useState("");
   const [leagueLogoUrl, setLeagueLogoUrl] = useState("");
   const [leagueLogoData, setLeagueLogoData] = useState<string | null>(null);
-  const [leagueLogoFileName, setLeagueLogoFileName] = useState("");
-  const leagueFileInputRef = useRef<HTMLInputElement>(null);
+  const leagueLogoFileRef = useRef<HTMLInputElement>(null);
 
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<{ type: "idle" | "success" | "error"; msg: string }>({
@@ -95,117 +116,39 @@ export default function CompetitionsAdminPage() {
     msg: "",
   });
 
-  const [titleModalOpen, setTitleModalOpen] = useState(false);
-  const [selectedLeagueForTitles, setSelectedLeagueForTitles] = useState<LocalLeagueItem | null>(null);
-  const [leagueClubsForTitles, setLeagueClubsForTitles] = useState<{
-    id: string;
-    fullName: string;
-    shortName: string | null;
-    slug: string;
-    crestUrl: string | null;
+  // Modal Palmarés / Campeones
+  const [championsModalOpen, setChampionsModalOpen] = useState(false);
+  const [championsTargetName, setChampionsTargetName] = useState("");
+  const [championsList, setChampionsList] = useState<{
+    titleId: string;
+    clubId: string;
+    clubSlug: string;
+    clubName: string;
+    clubFullName: string;
+    crestUrl: string;
+    titleName: string;
+    count: number;
     locality?: { name: string; province?: { name: string } } | null;
-    titles?: { id: string; name: string; count: number }[];
   }[]>([]);
-  const [selectedClubForTitle, setSelectedClubForTitle] = useState("");
-  const [clubSearchInModal, setClubSearchInModal] = useState("");
-  const [titleNameInput, setTitleNameInput] = useState("");
-  const [titleCountInput, setTitleCountInput] = useState(1);
-  const [titleSaving, setTitleSaving] = useState(false);
+  const [championsLoading, setChampionsLoading] = useState(false);
+  const [champSearchQuery, setChampSearchQuery] = useState("");
+  const [champSearchResults, setChampSearchResults] = useState<any[]>([]);
+  const [selectedClubForChamp, setSelectedClubForChamp] = useState<any | null>(null);
+  const [champTitleCount, setChampTitleCount] = useState(1);
+  const [champSaving, setChampSaving] = useState(false);
 
-  // Estado para la fusión manual de ligas
-  const [mergeModalOpen, setMergeModalOpen] = useState(false);
-  const [sourceLeagueToMerge, setSourceLeagueToMerge] = useState<LocalLeagueItem | null>(null);
-  const [targetLeagueIdToMerge, setTargetLeagueIdToMerge] = useState("");
-  const [mergeSaving, setMergeSaving] = useState(false);
-
-  const handleOpenTitleModal = async (l: LocalLeagueItem) => {
-    setSelectedLeagueForTitles(l);
-    setTitleNameInput(l.name);
-    setSelectedClubForTitle("");
-    setClubSearchInModal("");
-    setTitleCountInput(1);
-    setTitleModalOpen(true);
-    const clubs = await getClubsByLeagueId(l.id);
-    setLeagueClubsForTitles(clubs);
-  };
-
-  const handleSelectClubInTitleModal = (clubId: string) => {
-    setSelectedClubForTitle(clubId);
-    const club = leagueClubsForTitles.find((c) => c.id === clubId);
-    if (club && selectedLeagueForTitles) {
-      const matchTitle = club.titles?.find(
-        (t) => t.name.toLowerCase().trim() === selectedLeagueForTitles.name.toLowerCase().trim()
-      );
-      setTitleCountInput(matchTitle ? matchTitle.count : 1);
-    }
-  };
-
-  const handleSaveTitle = async (mode: "SET" | "ADD" = "SET") => {
-    if (!selectedClubForTitle || !titleNameInput) {
-      alert("Selecciona un club e ingresa el nombre del título.");
-      return;
-    }
-    setTitleSaving(true);
-    const countToApply = mode === "SET" ? Number(titleCountInput) : 1;
-    const res = await setClubTitleCountFromAdmin(
-      selectedClubForTitle,
-      titleNameInput,
-      countToApply,
-      mode
-    );
-    setTitleSaving(false);
-    if (res.error) {
-      alert(res.error);
-    } else {
-      // Recargar clubes de la liga para actualizar las cantidades en tiempo real
-      if (selectedLeagueForTitles) {
-        const updatedClubs = await getClubsByLeagueId(selectedLeagueForTitles.id);
-        setLeagueClubsForTitles(updatedClubs);
-      }
-      refreshAllData();
-    }
-  };
-
-  const handleOpenMergeModal = (l: LocalLeagueItem) => {
-    setSourceLeagueToMerge(l);
-    setTargetLeagueIdToMerge("");
-    setMergeModalOpen(true);
-  };
-
-  const handleExecuteMerge = async () => {
-    if (!sourceLeagueToMerge || !targetLeagueIdToMerge) {
-      alert("Selecciona la liga destino hacia donde transferir los clubes.");
-      return;
-    }
-    const targetLeague = localLeagues.find((l) => l.id === targetLeagueIdToMerge);
-    if (!confirm(`¿Confirmas fusionar "${sourceLeagueToMerge.name}" hacia "${targetLeague?.name}"?\nTodos los clubes de "${sourceLeagueToMerge.name}" se transferirán a "${targetLeague?.name}". Sus provincias reales (localidades) se mantendrán intactas.`)) {
-      return;
-    }
-
-    setMergeSaving(true);
-    const res = await mergeDuplicateLeagues(targetLeagueIdToMerge, sourceLeagueToMerge.id);
-    setMergeSaving(false);
-
-    if (res.error) {
-      alert(res.error);
-    } else {
-      alert(`🔀 ¡Fusión realizada con éxito! Los clubes ahora pertenecen a "${targetLeague?.name}".`);
-      setMergeModalOpen(false);
-      refreshAllData();
-    }
-  };
-
-  const handleAutoMerge = async () => {
-    if (!confirm("¿Deseas fusionar automáticamente todas las ligas regionales duplicadas? Los clubes se asociarán a la liga principal y los registros sobrantes se eliminarán.")) return;
-    setLoading(true);
-    const res = await autoMergeDuplicateLocalLeagues();
-    setLoading(false);
-    if (res.error) alert(res.error);
-    else {
-      alert(`⚡ ¡Fusionadas ${res.mergedCount} ligas duplicadas con éxito!`);
-      refreshAllData();
-    }
-  };
+  // Modal Gestión de Equipos
+  const [teamsModalOpen, setTeamsModalOpen] = useState(false);
+  const [teamsTarget, setTeamsTarget] = useState<{
+    type: "COMPETITION" | "REGIONAL_LEAGUE";
+    item: CompetitionItem | LocalLeagueItem;
+  } | null>(null);
+  const [teamsList, setTeamsList] = useState<any[]>([]);
+  const [teamsLoading, setTeamsLoading] = useState(false);
+  const [teamSearchQuery, setTeamSearchQuery] = useState("");
+  const [teamSearchResults, setTeamSearchResults] = useState<any[]>([]);
+  const [teamSearchLoading, setTeamSearchLoading] = useState(false);
+  const [teamActionId, setTeamActionId] = useState<string | null>(null);
 
   const refreshAllData = async () => {
     setLoading(true);
@@ -221,21 +164,149 @@ export default function CompetitionsAdminPage() {
   };
 
   useEffect(() => {
-    let active = true;
-    Promise.all([getCompetitions(), getLocalLeagues(), getAdminFormData()]).then(
-      ([compsData, leaguesData, adminForm]) => {
-        if (active) {
-          setCompetitions(compsData);
-          setLocalLeagues(leaguesData);
-          setProvinces(adminForm.provinces);
-          setLoading(false);
-        }
-      }
-    );
-    return () => {
-      active = false;
-    };
+    refreshAllData();
   }, []);
+
+  // Modal Campeones / Palmarés
+  const handleOpenChampionsModal = async (name: string) => {
+    setChampionsTargetName(name);
+    setChampSearchQuery("");
+    setChampSearchResults([]);
+    setSelectedClubForChamp(null);
+    setChampTitleCount(1);
+    setChampionsModalOpen(true);
+    setChampionsLoading(true);
+
+    const champs = await getCompetitionChampions(name);
+    setChampionsList(champs);
+    setChampionsLoading(false);
+  };
+
+  const handleReloadChampionsList = async () => {
+    if (!championsTargetName) return;
+    setChampionsLoading(true);
+    const champs = await getCompetitionChampions(championsTargetName);
+    setChampionsList(champs);
+    setChampionsLoading(false);
+    refreshAllData();
+  };
+
+  useEffect(() => {
+    if (champSearchQuery.trim().length < 2) {
+      setChampSearchResults([]);
+      return;
+    }
+    const delay = setTimeout(async () => {
+      const results = await searchClubsForSelection(champSearchQuery);
+      setChampSearchResults(results);
+    }, 300);
+    return () => clearTimeout(delay);
+  }, [champSearchQuery]);
+
+  const handleSaveChampionTitle = async () => {
+    if (!selectedClubForChamp || !championsTargetName) {
+      alert("Seleccioná un club para registrar el título.");
+      return;
+    }
+    setChampSaving(true);
+    const res = await setClubTitleCountFromAdmin(
+      selectedClubForChamp.id,
+      championsTargetName,
+      champTitleCount,
+      "SET"
+    );
+    setChampSaving(false);
+    if (res.error) alert(res.error);
+    else {
+      setSelectedClubForChamp(null);
+      setChampSearchQuery("");
+      await handleReloadChampionsList();
+    }
+  };
+
+  const handleDeleteChampionTitle = async (titleId: string) => {
+    if (!confirm("¿Eliminar este registro de título para este club?")) return;
+    const res = await deleteTitleById(titleId);
+    if (res.error) alert(res.error);
+    else await handleReloadChampionsList();
+  };
+
+  // Modal Gestión de Equipos
+  const handleOpenTeamsModal = async (
+    type: "COMPETITION" | "REGIONAL_LEAGUE",
+    item: CompetitionItem | LocalLeagueItem
+  ) => {
+    setTeamsTarget({ type, item });
+    setTeamSearchQuery("");
+    setTeamSearchResults([]);
+    setTeamsModalOpen(true);
+    setTeamsLoading(true);
+
+    if (type === "COMPETITION") {
+      const clubs = await getClubsByCompetitionId(item.id);
+      setTeamsList(clubs);
+    } else {
+      const clubs = await getClubsByLeagueId(item.id);
+      setTeamsList(clubs);
+    }
+    setTeamsLoading(false);
+  };
+
+  const handleReloadTeamsList = async () => {
+    if (!teamsTarget) return;
+    setTeamsLoading(true);
+    if (teamsTarget.type === "COMPETITION") {
+      const clubs = await getClubsByCompetitionId(teamsTarget.item.id);
+      setTeamsList(clubs);
+    } else {
+      const clubs = await getClubsByLeagueId(teamsTarget.item.id);
+      setTeamsList(clubs);
+    }
+    setTeamsLoading(false);
+    refreshAllData();
+  };
+
+  useEffect(() => {
+    if (teamSearchQuery.trim().length < 2) {
+      setTeamSearchResults([]);
+      return;
+    }
+    setTeamSearchLoading(true);
+    const delay = setTimeout(async () => {
+      const results = await searchClubsForSelection(teamSearchQuery);
+      setTeamSearchResults(results);
+      setTeamSearchLoading(false);
+    }, 300);
+    return () => clearTimeout(delay);
+  }, [teamSearchQuery]);
+
+  const handleAddTeamToTarget = async (clubId: string) => {
+    if (!teamsTarget) return;
+    setTeamActionId(clubId);
+    let res;
+    if (teamsTarget.type === "COMPETITION") {
+      res = await addClubToCompetition(teamsTarget.item.id, clubId);
+    } else {
+      res = await addClubToLocalLeague(teamsTarget.item.id, clubId);
+    }
+    setTeamActionId(null);
+    if (res.error) alert(res.error);
+    else await handleReloadTeamsList();
+  };
+
+  const handleRemoveTeamFromTarget = async (clubId: string) => {
+    if (!teamsTarget) return;
+    setTeamActionId(clubId);
+    let res;
+    if (teamsTarget.type === "COMPETITION") {
+      res = await removeClubFromCompetition(teamsTarget.item.id, clubId);
+    } else {
+      res = await removeClubFromLocalLeague(clubId);
+    }
+    setTeamActionId(null);
+    if (res.error) alert(res.error);
+    else await handleReloadTeamsList();
+  };
 
   const compAutoSlug = slugify(compName);
   const compFinalSlug = compManualSlug.trim() || compAutoSlug;
@@ -253,7 +324,6 @@ export default function CompetitionsAdminPage() {
     setCompFoundation("");
     setCompLogoUrl("");
     setCompLogoData(null);
-    setCompLogoFileName("");
     setStatus({ type: "idle", msg: "" });
   };
 
@@ -266,7 +336,6 @@ export default function CompetitionsAdminPage() {
     setLeagueFoundation("");
     setLeagueLogoUrl("");
     setLeagueLogoData(null);
-    setLeagueLogoFileName("");
     setStatus({ type: "idle", msg: "" });
   };
 
@@ -290,74 +359,6 @@ export default function CompetitionsAdminPage() {
     else refreshAllData();
   };
 
-  const handleCompLogoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setCompLogoFileName(file.name);
-    try {
-      const webp = await imageFileToWebp256(file);
-      setCompLogoData(webp);
-    } catch {
-      setStatus({ type: "error", msg: "Error al procesar el logo" });
-    }
-  };
-
-  const handleSubmitComp = async (e: React.FormEvent) => {
-    e.preventDefault();
-
-    if (!compName.trim()) {
-      setStatus({ type: "error", msg: "El nombre de la competencia es obligatorio" });
-      return;
-    }
-
-    setSaving(true);
-    setStatus({ type: "idle", msg: "" });
-
-    try {
-      let finalLogo = compLogoUrl;
-
-      if (compLogoData) {
-        try {
-          const uploadRes = await fetch("/api/upload-logo", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ key: compFinalSlug, folder: "competitions", data: compLogoData }),
-          });
-          if (uploadRes.ok) {
-            const uploadJson = await uploadRes.json();
-            finalLogo = uploadJson.logo_url;
-          }
-        } catch (uploadErr) {
-          console.warn("Error en subida de logo, continuando con la URL existente:", uploadErr);
-        }
-      }
-
-      const res = await upsertCompetition({
-        id: compMode === "EDIT" ? compEditingId : null,
-        name: compName,
-        slug: compFinalSlug,
-        type: compType,
-        // 🟢 Solo mandamos parseInt si hay valor, sino null (ideal para organizaciones)
-        level: compLevel && compLevel.trim() !== "" && !isNaN(Number(compLevel)) ? parseInt(compLevel, 10) : null,
-        parentId: compParentId && compParentId.trim() !== "" ? compParentId.trim() : null,
-        foundation: compFoundation || null,
-        logoUrl: finalLogo || null,
-      });
-
-      if (res.error) {
-        setStatus({ type: "error", msg: res.error });
-      } else {
-        setStatus({ type: "success", msg: "Competencia guardada exitosamente." });
-        await refreshAllData();
-        if (compMode === "CREATE") resetCompForm();
-      }
-    } catch (err: any) {
-      setStatus({ type: "error", msg: err.message || "Error de conexión" });
-    } finally {
-      setSaving(false);
-    }
-  };
-
   const handleEditLeague = (l: LocalLeagueItem) => {
     resetLeagueForm();
     setLeagueEditingId(l.id);
@@ -377,15 +378,74 @@ export default function CompetitionsAdminPage() {
     else refreshAllData();
   };
 
-  const handleLeagueLogoSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  async function handleCompLogoSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
-    setLeagueLogoFileName(file.name);
     try {
-      const webp = await imageFileToWebp256(file);
-      setLeagueLogoData(webp);
+      const webpData = await imageFileToWebp256(file);
+      setCompLogoData(webpData);
     } catch {
-      setStatus({ type: "error", msg: "Error al procesar el logo" });
+      setStatus({ type: "error", msg: "No se pudo procesar la imagen del logo" });
+    }
+  }
+
+  async function handleLeagueLogoSelect(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    try {
+      const webpData = await imageFileToWebp256(file);
+      setLeagueLogoData(webpData);
+    } catch {
+      setStatus({ type: "error", msg: "No se pudo procesar la imagen del logo" });
+    }
+  }
+
+  const handleSubmitComp = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!compName.trim()) {
+      setStatus({ type: "error", msg: "El nombre de la competencia es obligatorio" });
+      return;
+    }
+
+    setSaving(true);
+    setStatus({ type: "idle", msg: "" });
+
+    try {
+      let finalLogo = compLogoUrl;
+      if (compLogoData) {
+        const uploadRes = await fetch("/api/upload-logo", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ key: compFinalSlug, folder: "competitions", data: compLogoData }),
+        });
+        if (uploadRes.ok) {
+          const uploadJson = await uploadRes.json();
+          finalLogo = uploadJson.logo_url;
+        }
+      }
+
+      const res = await upsertCompetition({
+        id: compMode === "EDIT" ? compEditingId : null,
+        name: compName,
+        slug: compFinalSlug,
+        type: compType,
+        level: compLevel && compLevel.trim() !== "" && !isNaN(Number(compLevel)) ? parseInt(compLevel, 10) : null,
+        parentId: compParentId && compParentId.trim() !== "" ? compParentId.trim() : null,
+        foundation: compFoundation || null,
+        logoUrl: finalLogo || null,
+      });
+
+      if (res.error) {
+        setStatus({ type: "error", msg: res.error });
+      } else {
+        setStatus({ type: "success", msg: "Competencia guardada exitosamente." });
+        await refreshAllData();
+        setCompMode("IDLE");
+      }
+    } catch (err: any) {
+      setStatus({ type: "error", msg: err.message || "Error al guardar" });
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -427,11 +487,10 @@ export default function CompetitionsAdminPage() {
       } else {
         setStatus({ type: "success", msg: "Liga regional guardada exitosamente." });
         await refreshAllData();
-        if (leagueMode === "CREATE") resetLeagueForm();
+        setLeagueMode("IDLE");
       }
-    } catch (err: unknown) {
-      const e = err as Error;
-      setStatus({ type: "error", msg: e.message });
+    } catch (err: any) {
+      setStatus({ type: "error", msg: err.message });
     } finally {
       setSaving(false);
     }
@@ -440,1058 +499,993 @@ export default function CompetitionsAdminPage() {
   const [selectedProvinceFilter, setSelectedProvinceFilter] = useState("");
   const [selectedTypeFilter, setSelectedTypeFilter] = useState("");
   const [selectedLevelFilter, setSelectedLevelFilter] = useState("");
-  const [sortBy, setSortBy] = useState<"teams-desc" | "teams-asc" | "name-asc" | "name-desc" | "level-asc" | "level-desc">("level-asc");
-
-  function normSearch(s: string) {
-    return (s || "").toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "");
-  }
 
   const qNorm = normSearch(searchQuery);
 
-  const filteredCompetitions = competitions.filter((c) => {
-    const matchesSearch =
-      normSearch(c.name).includes(qNorm) ||
-      normSearch(c.slug).includes(qNorm);
-    const matchesType = !selectedTypeFilter || c.type === selectedTypeFilter;
-    const matchesLevel = !selectedLevelFilter || String(c.level) === selectedLevelFilter;
-    return matchesSearch && matchesType && matchesLevel;
-  }).sort((a, b) => {
-    if (sortBy === "teams-desc") return (b._count?.clubs ?? 0) - (a._count?.clubs ?? 0);
-    if (sortBy === "teams-asc") return (a._count?.clubs ?? 0) - (b._count?.clubs ?? 0);
-    if (sortBy === "name-asc") return a.name.localeCompare(b.name);
-    if (sortBy === "name-desc") return b.name.localeCompare(a.name);
-    if (sortBy === "level-desc") return (b.level ?? 0) - (a.level ?? 0);
-    return (a.level ?? 99) - (b.level ?? 99);
-  });
+  const filteredCompetitions = competitions
+    .filter((c) => {
+      const matchesSearch = normSearch(c.name).includes(qNorm) || normSearch(c.slug).includes(qNorm);
+      const matchesType = !selectedTypeFilter || c.type === selectedTypeFilter;
+      const matchesLevel = !selectedLevelFilter || String(c.level) === selectedLevelFilter;
+      return matchesSearch && matchesType && matchesLevel;
+    })
+    .sort((a, b) => (a.level ?? 99) - (b.level ?? 99));
 
-  const filteredLeagues = localLeagues.filter((l) => {
-    const matchesSearch =
-      normSearch(l.name).includes(qNorm) ||
-      normSearch(l.slug).includes(qNorm) ||
-      (l.province?.name && normSearch(l.province.name).includes(qNorm));
-    const matchesProv = !selectedProvinceFilter || l.provinceId === selectedProvinceFilter || l.province?.name === selectedProvinceFilter;
-    return matchesSearch && matchesProv;
-  }).sort((a, b) => {
-    if (sortBy === "teams-desc") return (b._count?.clubs ?? 0) - (a._count?.clubs ?? 0);
-    if (sortBy === "teams-asc") return (a._count?.clubs ?? 0) - (b._count?.clubs ?? 0);
-    if (sortBy === "name-desc") return b.name.localeCompare(a.name);
-    return a.name.localeCompare(b.name);
-  });
+  const filteredLeagues = localLeagues
+    .filter((l) => {
+      const matchesSearch =
+        normSearch(l.name).includes(qNorm) ||
+        normSearch(l.slug).includes(qNorm) ||
+        (l.province?.name && normSearch(l.province.name).includes(qNorm));
+      const matchesProv =
+        !selectedProvinceFilter || l.provinceId === selectedProvinceFilter || l.province?.name === selectedProvinceFilter;
+      return matchesSearch && matchesProv;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const handleCreateNewClick = () => {
+    if (activeTab === "COMPETITIONS") {
+      resetCompForm();
+      setCompMode("CREATE");
+    } else {
+      resetLeagueForm();
+      setLeagueMode("CREATE");
+    }
+  };
 
   return (
-    <div style={s.page}>
-      <AdminNav />
+    <AdminLayout
+      title="Gestión de Competencias"
+      subtitle="Administrá ligas, copas y torneos regionales."
+      onPrimaryAction={handleCreateNewClick}
+      primaryActionLabel={activeTab === "COMPETITIONS" ? "Nueva Competencia" : "Nueva Liga Regional"}
+    >
+      {/* Navegación de Pestañas - Estilos explícitos para evitar conflictos shorthand/longhand */}
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          marginBottom: "1.25rem",
+          borderBottomWidth: 1,
+          borderBottomStyle: "solid",
+          borderBottomColor: theme.borderCol,
+          paddingBottom: 8,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab("COMPETITIONS");
+            setCompMode("IDLE");
+            setLeagueMode("IDLE");
+          }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "9px 16px",
+            borderRadius: 10,
+            fontSize: 14,
+            fontWeight: 600,
+            color: activeTab === "COMPETITIONS" ? theme.textPrimary : theme.textMuted,
+            backgroundColor: activeTab === "COMPETITIONS" ? theme.bgCard : theme.bgInput,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: activeTab === "COMPETITIONS" ? "#2563eb" : theme.borderCol,
+            cursor: "pointer",
+            transition: "all 0.15s ease",
+          }}
+        >
+          <Trophy size={16} /> Torneos y Competencias ({competitions.length})
+        </button>
 
-      <div style={s.container}>
-        <div style={s.header}>
-          <h2 style={s.title}>Gestor de Torneos, Copas y Ligas</h2>
-          <p style={s.subtitle}>
-            Administrá competencias nacionales, internacionales, copas provinciales y ligas regionales con logos, jerarquías y fechas de fundación.
-          </p>
-        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setActiveTab("REGIONAL_LEAGUES");
+            setCompMode("IDLE");
+            setLeagueMode("IDLE");
+          }}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 8,
+            padding: "9px 16px",
+            borderRadius: 10,
+            fontSize: 14,
+            fontWeight: 600,
+            color: activeTab === "REGIONAL_LEAGUES" ? theme.textPrimary : theme.textMuted,
+            backgroundColor: activeTab === "REGIONAL_LEAGUES" ? theme.bgCard : theme.bgInput,
+            borderWidth: 1,
+            borderStyle: "solid",
+            borderColor: activeTab === "REGIONAL_LEAGUES" ? "#2563eb" : theme.borderCol,
+            cursor: "pointer",
+            transition: "all 0.15s ease",
+          }}
+        >
+          <Globe size={16} /> Ligas Regionales ({localLeagues.length})
+        </button>
+      </div>
 
-        <div style={s.tabsWrap}>
-          <button
-            onClick={() => {
-              setActiveTab("COMPETITIONS");
-              setCompMode("IDLE");
-              setLeagueMode("IDLE");
-            }}
-            style={{ ...s.tabButton, ...(activeTab === "COMPETITIONS" ? s.activeTabButton : {}) }}
-          >
-            🏆 Torneos y Competencias ({competitions.length})
-          </button>
-          <button
-            onClick={() => {
-              setActiveTab("REGIONAL_LEAGUES");
-              setCompMode("IDLE");
-              setLeagueMode("IDLE");
-            }}
-            style={{ ...s.tabButton, ...(activeTab === "REGIONAL_LEAGUES" ? s.activeTabButton : {}) }}
-          >
-            🚩 Ligas Regionales / Locales ({localLeagues.length})
-          </button>
-        </div>
+      {/* Pestaña: Torneos y Competencias Nacionales */}
+      {activeTab === "COMPETITIONS" && (
+        <>
+          {compMode === "IDLE" && (
+            <div>
+              {/* Filtros Card */}
+              <div
+                style={{
+                  backgroundColor: theme.bgCard,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderStyle: "solid",
+                  borderColor: theme.borderCol,
+                  padding: "1.25rem",
+                  marginBottom: "1.25rem",
+                }}
+              >
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5, flex: 2, minWidth: 240 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      Buscar Competencia
+                    </label>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        backgroundColor: theme.bgInput,
+                        borderWidth: 1,
+                        borderStyle: "solid",
+                        borderColor: theme.borderCol,
+                        borderRadius: 10,
+                        padding: "8px 12px",
+                      }}
+                    >
+                      <Search size={16} style={{ color: theme.textMuted }} />
+                      <input
+                        style={{ width: "100%", border: "none", outline: "none", fontSize: 14, color: theme.textPrimary, backgroundColor: "transparent" }}
+                        placeholder="Buscar por nombre o slug..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                      />
+                    </div>
+                  </div>
 
-        {activeTab === "COMPETITIONS" && (
-          <>
-            {compMode === "IDLE" && (
-              <div style={s.section}>
-                <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-                  <input
-                    style={{ ...s.input, flex: 1, minWidth: 200, fontSize: 14, padding: "10px 14px" }}
-                    placeholder="Buscar competencia por nombre o slug..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5, flex: 1, minWidth: 160 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      Formato
+                    </label>
+                    <select
+                      style={{
+                        width: "100%",
+                        borderWidth: 1,
+                        borderStyle: "solid",
+                        borderColor: theme.borderCol,
+                        borderRadius: 10,
+                        padding: "8px 12px",
+                        fontSize: 14,
+                        color: theme.textPrimary,
+                        backgroundColor: theme.bgInput,
+                        outline: "none",
+                      }}
+                      value={selectedTypeFilter}
+                      onChange={(e) => setSelectedTypeFilter(e.target.value)}
+                    >
+                      <option value="" style={{ backgroundColor: theme.bgCard }}>Todos los formatos</option>
+                      <option value="LEAGUE" style={{ backgroundColor: theme.bgCard }}>Liga</option>
+                      <option value="CUP" style={{ backgroundColor: theme.bgCard }}>Copa</option>
+                      <option value="TOURNAMENT" style={{ backgroundColor: theme.bgCard }}>Torneo</option>
+                      <option value="ORGANIZATION" style={{ backgroundColor: theme.bgCard }}>Federación / Ente</option>
+                    </select>
+                  </div>
 
-                  <select
-                    style={{ ...s.select, width: "auto", fontSize: 13, padding: "10px 12px" }}
-                    value={selectedTypeFilter}
-                    onChange={(e) => setSelectedTypeFilter(e.target.value)}
-                  >
-                    <option value="">-- Todos los formatos --</option>
-                    <option value="ORGANIZATION">Entes / Federaciones</option>
-                    <option value="LEAGUE">Ligas</option>
-                    <option value="CUP">Copas</option>
-                    <option value="TOURNAMENT">Torneos</option>
-                  </select>
-
-                  <select
-                    style={{ ...s.select, width: "auto", fontSize: 13, padding: "10px 12px" }}
-                    value={selectedLevelFilter}
-                    onChange={(e) => setSelectedLevelFilter(e.target.value)}
-                  >
-                    <option value="">-- Todos los niveles --</option>
-                    <option value="1">Nivel 1 (Internacional)</option>
-                    <option value="2">Nivel 2 (Primera Div - LPF)</option>
-                    <option value="3">Nivel 3 (Primera Nacional)</option>
-                    <option value="4">Nivel 4 (Federal A)</option>
-                    <option value="5">Nivel 5 (Regional Amateur)</option>
-                    <option value="6">Nivel 6 (Promocional)</option>
-                    <option value="7">Nivel 7 (Copas Prov)</option>
-                    <option value="8">Nivel 8 (Ligas Regionales)</option>
-                  </select>
-
-                  <select
-                    style={{ ...s.select, width: "auto", fontSize: 13, padding: "10px 12px" }}
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as any)}
-                  >
-                    <option value="level-asc">Jerarquía (1 → 8)</option>
-                    <option value="level-desc">Jerarquía (8 → 1)</option>
-                    <option value="teams-desc">Más equipos primero</option>
-                    <option value="teams-asc">Menos equipos primero</option>
-                    <option value="name-asc">Nombre (A-Z)</option>
-                    <option value="name-desc">Nombre (Z-A)</option>
-                  </select>
-
-                  <button
-                    style={s.btnPrimary}
-                    onClick={() => {
-                      resetCompForm();
-                      setCompMode("CREATE");
-                    }}
-                  >
-                    + Nueva Competencia
-                  </button>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5, flex: 1, minWidth: 160 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                      Jerarquía / Nivel
+                    </label>
+                    <select
+                      style={{
+                        width: "100%",
+                        borderWidth: 1,
+                        borderStyle: "solid",
+                        borderColor: theme.borderCol,
+                        borderRadius: 10,
+                        padding: "8px 12px",
+                        fontSize: 14,
+                        color: theme.textPrimary,
+                        backgroundColor: theme.bgInput,
+                        outline: "none",
+                      }}
+                      value={selectedLevelFilter}
+                      onChange={(e) => setSelectedLevelFilter(e.target.value)}
+                    >
+                      <option value="" style={{ backgroundColor: theme.bgCard }}>Todos los niveles</option>
+                      <option value="1" style={{ backgroundColor: theme.bgCard }}>Nivel 1 (Internacional)</option>
+                      <option value="2" style={{ backgroundColor: theme.bgCard }}>Nivel 2 (Primera Div - LPF)</option>
+                      <option value="3" style={{ backgroundColor: theme.bgCard }}>Nivel 3 (Primera Nacional)</option>
+                      <option value="4" style={{ backgroundColor: theme.bgCard }}>Nivel 4 (Federal A / B Metro)</option>
+                      <option value="5" style={{ backgroundColor: theme.bgCard }}>Nivel 5 (Regional Amateur)</option>
+                      <option value="6" style={{ backgroundColor: theme.bgCard }}>Nivel 6 (Promocional)</option>
+                      <option value="7" style={{ backgroundColor: theme.bgCard }}>Nivel 7 (Copas Prov)</option>
+                      <option value="8" style={{ backgroundColor: theme.bgCard }}>Nivel 8 (Ligas Regionales)</option>
+                    </select>
+                  </div>
                 </div>
-
-                {loading ? (
-                  <div style={{ padding: 20, textAlign: "center", color: "#64748b" }}>Cargando torneos...</div>
-                ) : filteredCompetitions.length === 0 ? (
-                  <div style={{ padding: 20, textAlign: "center", color: "#64748b" }}>
-                    No se encontraron competencias.
-                  </div>
-                ) : (
-                  <div style={s.tableWrap}>
-                    <table style={s.table}>
-                      <thead>
-                        <tr>
-                          <th style={s.th}>Logo</th>
-                          <th style={s.th}>Nivel</th>
-                          <th style={s.th}>Nombre</th>
-                          <th style={s.th}>Tipo</th>
-                          <th style={s.th}>Ente / Torneo Padre</th>
-                          <th style={s.th}>Fundación</th>
-                          <th style={s.th}>Clubes</th>
-                          <th style={{ ...s.th, textAlign: "right" }}>Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredCompetitions.map((c) => (
-                          <tr key={c.id} style={s.tr}>
-                            <td style={s.td}>
-                              <div style={s.miniLogoBox}>
-                                {c.logoUrl ? (
-                                  <img
-                                    src={c.logoUrl}
-                                    alt=""
-                                    style={{ width: "100%", height: "100%", objectFit: "contain" }}
-                                  />
-                                ) : (
-                                  <span style={{ fontSize: 14 }}>🏆</span>
-                                )}
-                              </div>
-                            </td>
-                            <td style={s.td}>
-                              <span style={s.levelBadge}>Nivel {c.level ?? "-"}</span>
-                            </td>
-                            <td style={s.td}>
-                              <div style={{ fontWeight: 600, color: "#0f172a" }}>{c.name}</div>
-                              <div style={{ fontSize: 11, color: "#64748b", fontFamily: "monospace" }}>{c.slug}</div>
-                            </td>
-                            <td style={s.td}>
-                              <span
-                                style={{
-                                  ...s.typeBadge,
-                                  backgroundColor:
-                                    c.type === "ORGANIZATION"
-                                      ? "#dcfce7"
-                                      : c.type === "CUP"
-                                      ? "#fef3c7"
-                                      : c.type === "LEAGUE"
-                                      ? "#e0f2fe"
-                                      : "#f3e8ff",
-                                  color:
-                                    c.type === "ORGANIZATION"
-                                      ? "#166534"
-                                      : c.type === "CUP"
-                                      ? "#92400e"
-                                      : c.type === "LEAGUE"
-                                      ? "#075985"
-                                      : "#6b21a8",
-                                }}
-                              >
-                                {c.type === "ORGANIZATION" ? "FEDERACIÓN" : c.type === "CUP" ? "COPA" : c.type === "LEAGUE" ? "LIGA" : "TORNEO"}
-                              </span>
-                            </td>
-                            <td style={s.td}>
-                              {c.parent ? c.parent.name : <span style={{ color: "#94a3b8" }}>—</span>}
-                            </td>
-                            <td style={s.td}>{c.foundation || <span style={{ color: "#94a3b8" }}>—</span>}</td>
-                            <td style={s.td}>{c._count?.clubs ?? 0}</td>
-                            <td style={{ ...s.td, textAlign: "right" }}>
-                              <button onClick={() => handleEditComp(c)} style={s.btnSmall}>
-                                Editar
-                              </button>
-                              <button
-                                onClick={() => handleDeleteComp(c.id, c.name)}
-                                style={{ ...s.btnSmall, color: "#dc2626", borderColor: "#fca5a5" }}
-                              >
-                                Eliminar
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
               </div>
-            )}
 
-            {compMode !== "IDLE" && (
-              <form onSubmit={handleSubmitComp} style={s.form}>
-                <div style={s.formHeader}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: "#0f172a" }}>
-                    {compMode === "CREATE" ? "Crear Nueva Competencia / Ente" : `Editando: ${compName}`}
-                  </h3>
-                  <button type="button" onClick={() => setCompMode("IDLE")} style={s.btnSecondary}>
-                    Volver a la lista
-                  </button>
+              {/* Lista de Filas de Tarjeta */}
+              {loading ? (
+                <div style={{ padding: "3rem", textAlign: "center", backgroundColor: theme.bgCard, borderRadius: 14, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, color: theme.textMuted }}>
+                  Cargando competencias...
                 </div>
+              ) : filteredCompetitions.length === 0 ? (
+                <div style={{ padding: "3rem", textAlign: "center", backgroundColor: theme.bgCard, borderRadius: 14, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, color: theme.textMuted }}>
+                  No se encontraron competencias.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {filteredCompetitions.map((c) => (
+                    <div
+                      key={c.id}
+                      style={{
+                        backgroundColor: theme.bgCard,
+                        borderRadius: 14,
+                        borderWidth: 1,
+                        borderStyle: "solid",
+                        borderColor: theme.borderCol,
+                        padding: "1rem 1.25rem",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 16,
+                        flexWrap: "wrap",
+                        boxShadow: theme.darkMode ? "0 2px 5px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.03)",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 260, flex: 2 }}>
+                        {/* Logo directo sin contenedor circular */}
+                        {c.logoUrl ? (
+                          <img src={c.logoUrl} alt="" style={{ width: 44, height: 44, objectFit: "contain", flexShrink: 0 }} />
+                        ) : (
+                          <Trophy size={28} style={{ color: "#2563eb", flexShrink: 0 }} />
+                        )}
 
-                <section style={s.section}>
-                  <h4 style={s.sectionTitle}>Información Principal</h4>
-                  <div style={s.grid2}>
-                    <div style={s.field}>
-                      <label style={s.label}>Nombre de la Competencia / Ente *</label>
-                      <input
-                        style={s.input}
-                        placeholder="Ej: AFA, Copa Entre Ríos, LPF..."
-                        value={compName}
-                        onChange={(e) => setCompName(e.target.value)}
-                      />
-                    </div>
-
-                    <div style={s.field}>
-                      <label style={s.label}>Slug Identificador (Auto-generado)</label>
-                      <div style={s.autoSlugPreview}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "#2563eb", fontFamily: "monospace" }}>
-                          {compFinalSlug || "slug-automatico"}
-                        </span>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 16, color: theme.textPrimary, lineHeight: 1.25 }}>
+                            {c.name}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                            {c.level && (
+                              <span style={{ fontSize: 11, fontWeight: 700, color: "#1e40af", backgroundColor: theme.darkMode ? "#1e3a8a" : "#eff6ff", borderRadius: 12, padding: "2px 8px" }}>
+                                Nivel {c.level}
+                              </span>
+                            )}
+                            <span style={{ fontSize: 11, fontWeight: 600, color: theme.textMuted, backgroundColor: theme.darkMode ? "#334155" : "#f1f5f9", borderRadius: 12, padding: "2px 8px" }}>
+                              {c.type === "ORGANIZATION" ? "Federación" : c.type === "CUP" ? "Copa Nacional" : "Liga"}
+                            </span>
+                          </div>
+                        </div>
                       </div>
-                      <input
-                        style={{ ...s.input, marginTop: 4, fontSize: 12, color: "#475569" }}
-                        placeholder="Forzar slug personalizado (opcional)..."
-                        value={compManualSlug}
-                        onChange={(e) => setCompManualSlug(e.target.value)}
-                      />
-                    </div>
 
-                    <div style={s.field}>
-                      <label style={s.label}>Tipo de Formato / Organización</label>
-                      <select
-                        style={s.select}
-                        value={compType}
-                        onChange={(e) => setCompType(e.target.value as CompetitionType)}
-                      >
-                        <option value="ORGANIZATION">ENTE / FEDERACIÓN (Ej: AFA, Conmebol, Consejo Federal)</option>
-                        <option value="LEAGUE">LIGA (Liga / Torneo largo o de puntos)</option>
-                        <option value="CUP">COPA (Copa de eliminación directa o mixta)</option>
-                        <option value="TOURNAMENT">TORNEO (Torneo corto / Zonal / Regional)</option>
-                      </select>
-                    </div>
+                      {/* Columnas Metadatos (Alcance, Fundación, Clubes) */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 24, flex: 1, justifyContent: "space-around", minWidth: 260 }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Alcance</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: theme.textPrimary, display: "flex", alignItems: "center", gap: 5 }}>
+                            <Globe size={13} style={{ color: theme.textMuted }} />
+                            {c.level && c.level <= 3 ? "Nacional" : "Regional"}
+                          </span>
+                        </div>
 
-                    <div style={s.field}>
-                      <label style={s.label}>Nivel de Jerarquía Oficial</label>
-                      <select
-                        style={s.select}
-                        value={compLevel}
-                        onChange={(e) => setCompLevel(e.target.value)}
-                      >
-                        <option value="">-- Sin nivel (Ideal para Entes / Federaciones) --</option>
-                        <option value="1">1 - Internacional (Copa Libertadores, Copa Sudamericana)</option>
-                        <option value="2">2 - Primera División (Liga Profesional AFA - LPF)</option>
-                        <option value="3">3 - Segunda División (Primera Nacional, Copa Argentina)</option>
-                        <option value="4">4 - Tercera División (Torneo Federal A, Primera B Metro)</option>
-                        <option value="5">5 - Cuarta División (Torneo Regional Federal Amateur, Primera C)</option>
-                        <option value="6">6 - Quinta División (Torneo Promocional Amateur)</option>
-                        <option value="7">7 - Sexta División (Copas Provinciales: Copa Santa Fe, Copa Entre Ríos)</option>
-                        <option value="8">8 - Séptima División (Ligas Regionales y Locales)</option>
-                      </select>
-                    </div>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Fundación</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: theme.textPrimary, display: "flex", alignItems: "center", gap: 5 }}>
+                            <Calendar size={13} style={{ color: theme.textMuted }} />
+                            {c.foundation || "—"}
+                          </span>
+                        </div>
 
-                    <div style={s.field}>
-                      <label style={s.label}>Año o Fecha de Fundación / Creación</label>
-                      <input
-                        style={s.input}
-                        placeholder="Ej: 13 de marzo de 1890, 2017..."
-                        value={compFoundation}
-                        onChange={(e) => setCompFoundation(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </section>
-
-                <section style={s.section}>
-                  <h4 style={s.sectionTitle}>Ente u Organización Madre (&quot;Torneo Padre&quot;)</h4>
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                    <div style={s.field}>
-                      <label style={s.label}>Torneo / Ente Padre (Opcional)</label>
-                      <select
-                        style={s.select}
-                        value={compParentId}
-                        onChange={(e) => setCompParentId(e.target.value)}
-                      >
-                        <option value="">Sin competencia padre (Nivel Máximo / Independiente)</option>
-                        {competitions
-                          .filter((c) => c.id !== compEditingId)
-                          .map((c) => (
-                            <option key={c.id} value={c.id}>
-                              {c.name} {c.level ? `(Nivel ${c.level})` : "(Federación)"}
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-
-                    <div style={s.infoCard}>
-                      <div style={{ fontWeight: 700, color: "#1e40af", marginBottom: 4, fontSize: 13 }}>
-                        ℹ️ ¿Qué es un Torneo Padre?
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Clubes</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: theme.textPrimary, display: "flex", alignItems: "center", gap: 5 }}>
+                            <Users size={13} style={{ color: "#2563eb" }} />
+                            <strong style={{ color: theme.textPrimary }}>{c._count?.clubs ?? 0}</strong>
+                          </span>
+                        </div>
                       </div>
-                      <div style={{ fontSize: 12, color: "#1e3a8a", lineHeight: 1.4 }}>
-                        Es la organización o torneo superior que reglamenta o da marco a esta competencia.
-                        Por ejemplo, podés crear la <strong>AFA</strong> como Federación (sin padre) y luego crear la <i>Liga Profesional</i> asignándole a la AFA como padre.
-                      </div>
-                    </div>
-                  </div>
-                </section>
 
-                <section style={s.section}>
-                  <h4 style={s.sectionTitle}>Logo / Trofeo Institucional</h4>
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
-                    <div style={s.badgeBox}>
-                      {compLogoData ? (
-                        <img src={compLogoData} alt="" style={s.badgeImg} />
-                      ) : compLogoUrl ? (
-                        <img
-                          src={compLogoUrl}
-                          alt=""
-                          style={s.badgeImg}
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = "none";
-                          }}
-                        />
-                      ) : (
-                        <span style={{ fontSize: 30 }}>🏆</span>
-                      )}
-                    </div>
-                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-                      <input
-                        ref={compFileInputRef}
-                        type="file"
-                        accept="image/*"
-                        style={{ display: "none" }}
-                        onChange={handleCompLogoSelect}
-                      />
-                      <div style={{ display: "flex", gap: 10 }}>
+                      {/* Botones de Acción Rápida (Iconos) */}
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
                         <button
                           type="button"
-                          style={s.btnSecondary}
-                          onClick={() => compFileInputRef.current?.click()}
+                          onClick={() => handleOpenTeamsModal("COMPETITION", c)}
+                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          title="Gestionar equipos participantes"
                         >
-                          {compLogoFileName ? "Cambiar Archivo" : "Subir Logo (Imagen)"}
+                          <Users size={17} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenChampionsModal(c.name)}
+                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          title="Gestionar palmarés y campeones históricos"
+                        >
+                          <Award size={17} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleEditComp(c)}
+                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          title="Editar competencia"
+                        >
+                          <Edit3 size={17} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteComp(c.id, c.name)}
+                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: "#dc2626", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          title="Eliminar competencia"
+                        >
+                          <Trash2 size={17} />
                         </button>
                       </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Formulario Crear / Editar Competencia */}
+          {compMode !== "IDLE" && (
+            <form
+              onSubmit={handleSubmitComp}
+              style={{
+                backgroundColor: theme.bgCard,
+                borderRadius: 16,
+                borderWidth: 1,
+                borderStyle: "solid",
+                borderColor: theme.borderCol,
+                padding: "1.5rem",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem", paddingBottom: "1rem", borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: theme.borderCol }}>
+                <h3 style={{ fontSize: 17, fontWeight: 800, color: theme.textPrimary, margin: 0 }}>
+                  {compMode === "CREATE" ? "Crear Nueva Competencia" : `Editando: ${compName}`}
+                </h3>
+                <button type="button" onClick={() => setCompMode("IDLE")} style={{ padding: "8px 14px", borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                  Cancelar
+                </button>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Nombre de la Competencia / Ente *</label>
+                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} placeholder="Ej: Liga Profesional de Fútbol, Copa Argentina" value={compName} onChange={(e) => setCompName(e.target.value)} />
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Slug (Auto-generado)</label>
+                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} placeholder={compAutoSlug} value={compManualSlug} onChange={(e) => setCompManualSlug(e.target.value)} />
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Formato / Organización</label>
+                  <select style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} value={compType} onChange={(e) => setCompType(e.target.value as CompetitionType)}>
+                    <option value="LEAGUE" style={{ backgroundColor: theme.bgCard }}>LIGA (Liga / Torneo largo o de puntos)</option>
+                    <option value="CUP" style={{ backgroundColor: theme.bgCard }}>COPA (Copa de eliminación directa)</option>
+                    <option value="TOURNAMENT" style={{ backgroundColor: theme.bgCard }}>TORNEO (Torneo zonal / regional)</option>
+                    <option value="ORGANIZATION" style={{ backgroundColor: theme.bgCard }}>FEDERACIÓN / ENTE (Ej: AFA, Conmebol)</option>
+                  </select>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Nivel de Jerarquía Oficial</label>
+                  <select style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} value={compLevel} onChange={(e) => setCompLevel(e.target.value)}>
+                    <option value="" style={{ backgroundColor: theme.bgCard }}>Sin nivel (Ideal para Federaciones)</option>
+                    <option value="1" style={{ backgroundColor: theme.bgCard }}>1 - Internacional (Copa Libertadores)</option>
+                    <option value="2" style={{ backgroundColor: theme.bgCard }}>2 - Primera División (Liga Profesional AFA)</option>
+                    <option value="3" style={{ backgroundColor: theme.bgCard }}>3 - Segunda División (Primera Nacional)</option>
+                    <option value="4" style={{ backgroundColor: theme.bgCard }}>4 - Tercera División (Federal A / B Metro)</option>
+                    <option value="5" style={{ backgroundColor: theme.bgCard }}>5 - Cuarta División (Regional Amateur)</option>
+                    <option value="6" style={{ backgroundColor: theme.bgCard }}>6 - Quinta División (Promocional)</option>
+                    <option value="7" style={{ backgroundColor: theme.bgCard }}>7 - Copas Provinciales</option>
+                    <option value="8" style={{ backgroundColor: theme.bgCard }}>8 - Ligas Regionales y Locales</option>
+                  </select>
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Año de Fundación</label>
+                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} placeholder="Ej: 1891" value={compFoundation} onChange={(e) => setCompFoundation(e.target.value)} />
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Logo o Trofeo Oficial</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <input
+                      type="file"
+                      ref={compLogoFileRef}
+                      accept="image/*"
+                      onChange={handleCompLogoSelect}
+                      style={{ display: "none" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => compLogoFileRef.current?.click()}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, backgroundColor: "#2563eb", color: "#ffffff", fontWeight: 600, fontSize: 13, border: "none", cursor: "pointer" }}
+                    >
+                      <Upload size={15} />
+                      <span>Seleccionar logo de la PC</span>
+                    </button>
+                    {compLogoUrl && <span style={{ fontSize: 12, color: theme.textMuted }}>✓ Imagen asignada</span>}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
+                <button type="button" onClick={() => setCompMode("IDLE")} style={{ padding: "9px 18px", borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                  Cancelar
+                </button>
+                <button type="submit" disabled={saving} style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: "#2563eb", color: "#ffffff", fontWeight: 700, fontSize: 13, border: "none", cursor: "pointer" }}>
+                  {saving ? "Guardando..." : "Guardar Competencia"}
+                </button>
+              </div>
+            </form>
+          )}
+        </>
+      )}
+
+      {/* Pestaña: Ligas Regionales */}
+      {activeTab === "REGIONAL_LEAGUES" && (
+        <>
+          {leagueMode === "IDLE" && (
+            <div>
+              <div
+                style={{
+                  backgroundColor: theme.bgCard,
+                  borderRadius: 14,
+                  borderWidth: 1,
+                  borderStyle: "solid",
+                  borderColor: theme.borderCol,
+                  padding: "1.25rem",
+                  marginBottom: "1.25rem",
+                }}
+              >
+                <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5, flex: 2, minWidth: 240 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Buscar Liga Regional</label>
+                    <div
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 8,
+                        backgroundColor: theme.bgInput,
+                        borderWidth: 1,
+                        borderStyle: "solid",
+                        borderColor: theme.borderCol,
+                        borderRadius: 10,
+                        padding: "8px 12px",
+                      }}
+                    >
+                      <Search size={16} style={{ color: theme.textMuted }} />
                       <input
-                        style={{ ...s.input, fontSize: 12 }}
-                        placeholder="O ingresar URL directa del logo (ej: /logos/libertadores.webp)..."
-                        value={compLogoUrl}
-                        onChange={(e) => setCompLogoUrl(e.target.value)}
+                        style={{ width: "100%", border: "none", outline: "none", fontSize: 14, color: theme.textPrimary, backgroundColor: "transparent" }}
+                        placeholder="Buscar por nombre, slug o provincia..."
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
                       />
                     </div>
                   </div>
-                </section>
 
-                {status.msg && (
-                  <div style={status.type === "success" ? s.alertSuccess : s.alertError}>{status.msg}</div>
-                )}
-
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button type="submit" style={s.btnPrimary} disabled={saving}>
-                    {saving ? "Guardando..." : "Guardar Registro"}
-                  </button>
-                  <button type="button" onClick={() => setCompMode("IDLE")} style={s.btnSecondary}>
-                    Cancelar
-                  </button>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 5, flex: 1, minWidth: 180 }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Provincia</label>
+                    <select
+                      style={{
+                        width: "100%",
+                        borderWidth: 1,
+                        borderStyle: "solid",
+                        borderColor: theme.borderCol,
+                        borderRadius: 10,
+                        padding: "8px 12px",
+                        fontSize: 14,
+                        color: theme.textPrimary,
+                        backgroundColor: theme.bgInput,
+                        outline: "none",
+                      }}
+                      value={selectedProvinceFilter}
+                      onChange={(e) => setSelectedProvinceFilter(e.target.value)}
+                    >
+                      <option value="" style={{ backgroundColor: theme.bgCard }}>Todas las provincias</option>
+                      {provinces.map((p) => (
+                        <option key={p.id} value={p.id} style={{ backgroundColor: theme.bgCard }}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
-              </form>
-            )}
-          </>
-        )}
+              </div>
 
-        {/* ----------------- TAB 2: LIGAS REGIONALES Y LOCALES ----------------- */}
-        {activeTab === "REGIONAL_LEAGUES" && (
-          <>
-            {leagueMode === "IDLE" && (
-              <div style={s.section}>
-                <div style={{ display: "flex", gap: 10, marginBottom: 16, flexWrap: "wrap", alignItems: "center" }}>
-                  <input
-                    style={{ ...s.input, flex: 1, minWidth: 200, fontSize: 14, padding: "10px 14px" }}
-                    placeholder="Buscar liga regional por nombre, provincia o slug..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                  />
+              {loading ? (
+                <div style={{ padding: "3rem", textAlign: "center", backgroundColor: theme.bgCard, borderRadius: 14, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, color: theme.textMuted }}>
+                  Cargando ligas regionales...
+                </div>
+              ) : filteredLeagues.length === 0 ? (
+                <div style={{ padding: "3rem", textAlign: "center", backgroundColor: theme.bgCard, borderRadius: 14, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, color: theme.textMuted }}>
+                  No se encontraron ligas regionales.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                  {filteredLeagues.map((l) => (
+                    <div
+                      key={l.id}
+                      style={{
+                        backgroundColor: theme.bgCard,
+                        borderRadius: 14,
+                        borderWidth: 1,
+                        borderStyle: "solid",
+                        borderColor: theme.borderCol,
+                        padding: "1rem 1.25rem",
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "space-between",
+                        gap: 16,
+                        flexWrap: "wrap",
+                        boxShadow: theme.darkMode ? "0 2px 5px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.03)",
+                      }}
+                    >
+                      <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 260, flex: 2 }}>
+                        {/* Logo directo sin contenedor circular */}
+                        {l.logoUrl ? (
+                          <img src={l.logoUrl} alt="" style={{ width: 44, height: 44, objectFit: "contain", flexShrink: 0 }} />
+                        ) : (
+                          <Globe size={28} style={{ color: "#2563eb", flexShrink: 0 }} />
+                        )}
 
-                  <select
-                    style={{ ...s.select, width: "auto", fontSize: 13, padding: "10px 12px" }}
-                    value={selectedProvinceFilter}
-                    onChange={(e) => setSelectedProvinceFilter(e.target.value)}
-                  >
-                    <option value="">-- Todas las provincias --</option>
+                        <div>
+                          <div style={{ fontWeight: 700, fontSize: 16, color: theme.textPrimary, lineHeight: 1.25 }}>
+                            {l.name}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "#166534", backgroundColor: theme.darkMode ? "#14532d" : "#dcfce7", borderRadius: 12, padding: "2px 8px" }}>
+                              {l.province?.name || "Provincia"}
+                            </span>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: theme.textMuted, backgroundColor: theme.darkMode ? "#334155" : "#f1f5f9", borderRadius: 12, padding: "2px 8px" }}>
+                              Liga Regional
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 24, flex: 1, justifyContent: "space-around", minWidth: 260 }}>
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Organizador</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: theme.textPrimary }}>{l.organizer || "—"}</span>
+                        </div>
+
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Fundación</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: theme.textPrimary }}>{l.foundation || "—"}</span>
+                        </div>
+
+                        <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Clubes</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: theme.textPrimary, display: "flex", alignItems: "center", gap: 5 }}>
+                            <Users size={13} style={{ color: "#2563eb" }} />
+                            <strong style={{ color: theme.textPrimary }}>{l._count?.clubs ?? 0}</strong>
+                          </span>
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+                        <button
+                          type="button"
+                          onClick={() => handleOpenTeamsModal("REGIONAL_LEAGUE", l)}
+                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          title="Gestionar clubes inscritos"
+                        >
+                          <Users size={17} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleOpenChampionsModal(l.name)}
+                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          title="Gestionar palmarés y campeones de la liga"
+                        >
+                          <Award size={17} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleEditLeague(l)}
+                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          title="Editar liga regional"
+                        >
+                          <Edit3 size={17} />
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteLeague(l.id, l.name)}
+                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: "#dc2626", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          title="Eliminar liga"
+                        >
+                          <Trash2 size={17} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Formulario Crear / Editar Liga Regional */}
+          {leagueMode !== "IDLE" && (
+            <form
+              onSubmit={handleSubmitLeague}
+              style={{
+                backgroundColor: theme.bgCard,
+                borderRadius: 16,
+                borderWidth: 1,
+                borderStyle: "solid",
+                borderColor: theme.borderCol,
+                padding: "1.5rem",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem", paddingBottom: "1rem", borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: theme.borderCol }}>
+                <h3 style={{ fontSize: 17, fontWeight: 800, color: theme.textPrimary, margin: 0 }}>
+                  {leagueMode === "CREATE" ? "Crear Nueva Liga Regional" : `Editando: ${leagueName}`}
+                </h3>
+                <button type="button" onClick={() => setLeagueMode("IDLE")} style={{ padding: "8px 14px", borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                  Cancelar
+                </button>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Nombre de la Liga Regional *</label>
+                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} placeholder="Ej: Liga Santafesina de Fútbol" value={leagueName} onChange={(e) => setLeagueName(e.target.value)} />
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Provincia *</label>
+                  <select style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} value={leagueProvinceId} onChange={(e) => setLeagueProvinceId(e.target.value)}>
                     {provinces.map((p) => (
-                      <option key={p.id} value={p.id}>
+                      <option key={p.id} value={p.id} style={{ backgroundColor: theme.bgCard }}>
                         {p.name}
                       </option>
                     ))}
                   </select>
-
-                  <select
-                    style={{ ...s.select, width: "auto", fontSize: 13, padding: "10px 12px" }}
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as any)}
-                  >
-                    <option value="name-asc">Nombre (A-Z)</option>
-                    <option value="name-desc">Nombre (Z-A)</option>
-                    <option value="teams-desc">Más equipos primero</option>
-                    <option value="teams-asc">Menos equipos primero</option>
-                  </select>
-
-                  <button
-                    style={s.btnPrimary}
-                    onClick={() => {
-                      resetLeagueForm();
-                      setLeagueMode("CREATE");
-                    }}
-                  >
-                    + Nueva Liga Regional
-                  </button>
-
-                  <button
-                    style={{ ...s.btnSecondary, background: "#fef3c7", color: "#92400e", borderColor: "#fde68a" }}
-                    onClick={handleAutoMerge}
-                    title="Busca y fusiona ligas con nombres idénticos/duplicados reasignando sus clubes"
-                  >
-                    ⚡ Auto-Fusionar Ligas Duplicadas
-                  </button>
                 </div>
 
-                {loading ? (
-                  <div style={{ padding: 20, textAlign: "center", color: "#64748b" }}>Cargando ligas regionales...</div>
-                ) : filteredLeagues.length === 0 ? (
-                  <div style={{ padding: 20, textAlign: "center", color: "#64748b" }}>
-                    No se encontraron ligas regionales.
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Organizador / Ente Madre</label>
+                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} placeholder="Ej: Consejo Federal AFA" value={leagueOrganizer} onChange={(e) => setLeagueOrganizer(e.target.value)} />
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Fecha de Fundación</label>
+                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} placeholder="Ej: 1 de julio de 1931" value={leagueFoundation} onChange={(e) => setLeagueFoundation(e.target.value)} />
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Logo Oficial de la Liga</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                    <input
+                      type="file"
+                      ref={leagueLogoFileRef}
+                      accept="image/*"
+                      onChange={handleLeagueLogoSelect}
+                      style={{ display: "none" }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => leagueLogoFileRef.current?.click()}
+                      style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, backgroundColor: "#2563eb", color: "#ffffff", fontWeight: 600, fontSize: 13, border: "none", cursor: "pointer" }}
+                    >
+                      <Upload size={15} />
+                      <span>Seleccionar logo de la PC</span>
+                    </button>
+                    {leagueLogoUrl && <span style={{ fontSize: 12, color: theme.textMuted }}>✓ Imagen asignada</span>}
                   </div>
-                ) : (
-                  <div style={s.tableWrap}>
-                    <table style={s.table}>
-                      <thead>
-                        <tr>
-                          <th style={s.th}>Logo</th>
-                          <th style={s.th}>Provincia</th>
-                          <th style={s.th}>Nombre de la Liga</th>
-                          <th style={s.th}>Ente Organizador</th>
-                          <th style={s.th}>Fundación</th>
-                          <th style={s.th}>Clubes</th>
-                          <th style={{ ...s.th, textAlign: "right" }}>Acciones</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {filteredLeagues.map((l) => (
-                          <tr key={l.id} style={s.tr}>
-                            <td style={s.td}>
-                              <div style={s.miniLogoBox}>
-                                {l.logoUrl ? (
-                                  <img
-                                    src={l.logoUrl}
-                                    alt=""
-                                    style={{ width: "100%", height: "100%", objectFit: "contain" }}
-                                  />
-                                ) : (
-                                  <span style={{ fontSize: 14 }}>🚩</span>
-                                )}
-                              </div>
-                            </td>
-                            <td style={s.td}>
-                              <span style={s.provBadge}>{l.province?.name || "S/D"}</span>
-                            </td>
-                            <td style={s.td}>
-                              <div style={{ fontWeight: 600, color: "#0f172a" }}>{l.name}</div>
-                              <div style={{ fontSize: 11, color: "#64748b", fontFamily: "monospace" }}>{l.slug}</div>
-                            </td>
-                            <td style={s.td}>{l.organizer || <span style={{ color: "#94a3b8" }}>—</span>}</td>
-                            <td style={s.td}>{l.foundation || <span style={{ color: "#94a3b8" }}>—</span>}</td>
-                            <td style={s.td}>{l._count?.clubs ?? 0}</td>
-                            <td style={{ ...s.td, textAlign: "right" }}>
-                              <button
-                                onClick={() => handleOpenTitleModal(l)}
-                                style={{ ...s.btnSmall, background: "#fef9c3", color: "#854d0e", borderColor: "#fef08a" }}
-                                title="Asignar un título/campeonato directamente a un club de esta liga"
-                              >
-                                🏆 Títulos
-                              </button>
-                              <button onClick={() => handleEditLeague(l)} style={s.btnSmall}>
-                                Editar
-                              </button>
-                              <button
-                                onClick={() => handleDeleteLeague(l.id, l.name)}
-                                style={{ ...s.btnSmall, color: "#dc2626", borderColor: "#fca5a5" }}
-                              >
-                                Eliminar
-                              </button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
+                </div>
               </div>
-            )}
 
-            {leagueMode !== "IDLE" && (
-              <form onSubmit={handleSubmitLeague} style={s.form}>
-                <div style={s.formHeader}>
-                  <h3 style={{ fontSize: 16, fontWeight: 700, margin: 0, color: "#0f172a" }}>
-                    {leagueMode === "CREATE" ? "Crear Nueva Liga Regional" : `Editando: ${leagueName}`}
-                  </h3>
-                  <button type="button" onClick={() => setLeagueMode("IDLE")} style={s.btnSecondary}>
-                    Volver a la lista
-                  </button>
-                </div>
-
-                <section style={s.section}>
-                  <h4 style={s.sectionTitle}>Datos de la Liga Regional</h4>
-                  <div style={s.grid2}>
-                    <div style={s.field}>
-                      <label style={s.label}>Nombre Oficial de la Liga *</label>
-                      <input
-                        style={s.input}
-                        placeholder="Ej: Liga Santafesina de Fútbol, Liga Sanjuanina..."
-                        value={leagueName}
-                        onChange={(e) => setLeagueName(e.target.value)}
-                      />
-                    </div>
-
-                    <div style={s.field}>
-                      <label style={s.label}>Slug Identificador (Auto-generado)</label>
-                      <div style={s.autoSlugPreview}>
-                        <span style={{ fontSize: 13, fontWeight: 600, color: "#2563eb", fontFamily: "monospace" }}>
-                          {leagueFinalSlug || "slug-automatico"}
-                        </span>
-                      </div>
-                      <input
-                        style={{ ...s.input, marginTop: 4, fontSize: 12, color: "#475569" }}
-                        placeholder="Forzar slug personalizado (opcional)..."
-                        value={leagueManualSlug}
-                        onChange={(e) => setLeagueManualSlug(e.target.value)}
-                      />
-                    </div>
-
-                    <div style={s.field}>
-                      <label style={s.label}>Provincia de Origen *</label>
-                      <select
-                        style={s.select}
-                        value={leagueProvinceId}
-                        onChange={(e) => setLeagueProvinceId(e.target.value)}
-                      >
-                        {provinces.map((p) => (
-                          <option key={p.id} value={p.id}>
-                            {p.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div style={s.field}>
-                      <label style={s.label}>Ente u Organización (Ej: AFA / Consejo Federal)</label>
-                      <input
-                        style={s.input}
-                        placeholder="Ej: Consejo Federal de Fútbol..."
-                        value={leagueOrganizer}
-                        onChange={(e) => setLeagueOrganizer(e.target.value)}
-                      />
-                    </div>
-
-                    <div style={s.field}>
-                      <label style={s.label}>Año de Fundación</label>
-                      <input
-                        style={s.input}
-                        placeholder="Ej: 1931..."
-                        value={leagueFoundation}
-                        onChange={(e) => setLeagueFoundation(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </section>
-
-                <section style={s.section}>
-                  <h4 style={s.sectionTitle}>Escudo / Logo de la Liga Regional</h4>
-                  <div style={{ display: "flex", alignItems: "flex-start", gap: 16 }}>
-                    <div style={s.badgeBox}>
-                      {leagueLogoData ? (
-                        <img src={leagueLogoData} alt="" style={s.badgeImg} />
-                      ) : leagueLogoUrl ? (
-                        <img
-                          src={leagueLogoUrl}
-                          alt=""
-                          style={s.badgeImg}
-                          onError={(e) => {
-                            (e.target as HTMLImageElement).style.display = "none";
-                          }}
-                        />
-                      ) : (
-                        <span style={{ fontSize: 30 }}>🚩</span>
-                      )}
-                    </div>
-                    <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
-                      <input
-                        ref={leagueFileInputRef}
-                        type="file"
-                        accept="image/*"
-                        style={{ display: "none" }}
-                        onChange={handleLeagueLogoSelect}
-                      />
-                      <div style={{ display: "flex", gap: 10 }}>
-                        <button
-                          type="button"
-                          style={s.btnSecondary}
-                          onClick={() => leagueFileInputRef.current?.click()}
-                        >
-                          {leagueLogoFileName ? "Cambiar Archivo" : "Subir Logo (Imagen)"}
-                        </button>
-                      </div>
-                      <input
-                        style={{ ...s.input, fontSize: 12 }}
-                        placeholder="O ingresar URL directa del logo (ej: /leagues/liga-santafesina.webp)..."
-                        value={leagueLogoUrl}
-                        onChange={(e) => setLeagueLogoUrl(e.target.value)}
-                      />
-                    </div>
-                  </div>
-                </section>
-
-                {status.msg && (
-                  <div style={status.type === "success" ? s.alertSuccess : s.alertError}>{status.msg}</div>
-                )}
-
-                <div style={{ display: "flex", gap: 10 }}>
-                  <button type="submit" style={s.btnPrimary} disabled={saving}>
-                    {saving ? "Guardando..." : "Guardar Liga Regional"}
-                  </button>
-                  <button type="button" onClick={() => setLeagueMode("IDLE")} style={s.btnSecondary}>
-                    Cancelar
-                  </button>
-                </div>
-              </form>
-            )}
-          </>
-        )}
-
-        {/* Modal de Carga de Títulos */}
-        {titleModalOpen && selectedLeagueForTitles && (
-          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
-            <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl border border-gray-100 space-y-4">
-              <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-                <div className="font-bold text-gray-900 text-base">
-                  Asignar Título a un Club
-                </div>
-                <button
-                  onClick={() => setTitleModalOpen(false)}
-                  className="w-8 h-8 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center hover:bg-gray-200"
-                >
-                  ✕
+              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
+                <button type="button" onClick={() => setLeagueMode("IDLE")} style={{ padding: "9px 18px", borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                  Cancelar
+                </button>
+                <button type="submit" disabled={saving} style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: "#2563eb", color: "#ffffff", fontWeight: 700, fontSize: 13, border: "none", cursor: "pointer" }}>
+                  {saving ? "Guardando..." : "Guardar Liga Regional"}
                 </button>
               </div>
+            </form>
+          )}
+        </>
+      )}
 
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  await handleSaveTitle("SET");
-                }}
-                className="space-y-4"
-              >
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
-                    Liga / Torneo
-                  </label>
-                  <input
-                    type="text"
-                    readOnly
-                    className="w-full bg-gray-100 border border-gray-200 rounded-xl px-3 py-2 text-sm text-gray-700 font-semibold"
-                    value={selectedLeagueForTitles.name}
-                  />
+      {/* Modal 1: Gestión de Equipos Participantes */}
+      {teamsModalOpen && teamsTarget && (
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: "1rem" }}>
+          <div style={{ width: "100%", maxWidth: 640, backgroundColor: theme.bgCard, borderRadius: 16, padding: "1.5rem", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.3)", maxHeight: "90vh", overflowY: "auto", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1.25rem", paddingBottom: "0.75rem", borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: theme.borderCol }}>
+              <div>
+                <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0, color: theme.textPrimary }}>
+                  Gestión de Equipos Participantes
+                </h3>
+                <div style={{ fontSize: 13, color: theme.textMuted, marginTop: 2 }}>
+                  {teamsTarget.type === "COMPETITION" ? "Competencia" : "Liga Regional"}:{" "}
+                  <strong style={{ color: theme.textPrimary }}>{teamsTarget.item.name}</strong>{" "}
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#1e40af", backgroundColor: theme.darkMode ? "#1e3a8a" : "#eff6ff", borderRadius: 12, padding: "2px 8px" }}>
+                    ({teamsList.length} equipos)
+                  </span>
                 </div>
+              </div>
+              <button type="button" onClick={() => setTeamsModalOpen(false)} style={{ border: "none", background: "transparent", color: theme.textMuted, cursor: "pointer", padding: 4, display: "flex" }}>
+                <X size={18} />
+              </button>
+            </div>
 
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
-                    Seleccionar Club Campeón *
-                  </label>
-                  <input
-                    type="text"
-                    placeholder="Filtrar club por nombre..."
-                    className="w-full border border-gray-200 rounded-xl px-3 py-1.5 text-xs text-gray-900 mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={clubSearchInModal}
-                    onChange={(e) => setClubSearchInModal(e.target.value)}
-                  />
-                  <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-xl divide-y divide-gray-100 bg-gray-50 p-1">
-                    {leagueClubsForTitles.length === 0 ? (
-                      <div className="p-3 text-xs text-center text-gray-400">Cargando clubes de la liga...</div>
-                    ) : (
-                      leagueClubsForTitles
-                        .filter((c) => {
-                          const q = clubSearchInModal.toLowerCase();
-                          return (
-                            !q ||
-                            c.fullName.toLowerCase().includes(q) ||
-                            (c.shortName && c.shortName.toLowerCase().includes(q))
-                          );
-                        })
-                        .map((c) => {
-                          const isSelected = selectedClubForTitle === c.id;
-                          const titleMatch = c.titles?.find(
-                            (t) => t.name.toLowerCase().trim() === selectedLeagueForTitles.name.toLowerCase().trim()
-                          );
-                          const titleCount = titleMatch ? titleMatch.count : 0;
+            {/* Buscador para Añadir Clubes */}
+            <div style={{ backgroundColor: theme.bgInput, padding: 14, borderRadius: 10, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, marginBottom: 16 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: theme.textPrimary, marginBottom: 6, display: "block" }}>
+                Añadir Club a &quot;{teamsTarget.item.name}&quot;
+              </label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, backgroundColor: theme.bgCard, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 10, padding: "8px 12px" }}>
+                <Search size={16} style={{ color: theme.textMuted }} />
+                <input
+                  style={{ width: "100%", border: "none", outline: "none", fontSize: 14, color: theme.textPrimary, backgroundColor: "transparent" }}
+                  placeholder="Buscar club por nombre, apodo o ciudad para agregar..."
+                  value={teamSearchQuery}
+                  onChange={(e) => setTeamSearchQuery(e.target.value)}
+                />
+              </div>
 
-                          return (
-                            <div
-                              key={c.id}
-                              onClick={() => handleSelectClubInTitleModal(c.id)}
-                              className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-all ${
-                                isSelected
-                                  ? "bg-blue-600 text-white font-bold shadow-sm"
-                                  : "hover:bg-white text-gray-900 font-medium"
-                              }`}
-                            >
-                              <img
-                                src={c.crestUrl || `/badges/${c.slug}.webp`}
-                                alt=""
-                                className="w-8 h-8 object-contain shrink-0 bg-white rounded-full p-0.5"
-                                onError={(e) => {
-                                  (e.target as HTMLImageElement).style.visibility = "hidden";
-                                }}
-                              />
-                              <div className="min-w-0 flex-1">
-                                <div className="text-xs truncate font-semibold">{c.fullName}</div>
-                                {c.shortName && c.shortName !== c.fullName && (
-                                  <div className={`text-[10px] truncate ${isSelected ? "text-blue-100" : "text-gray-400"}`}>
-                                    {c.shortName}
-                                  </div>
-                                )}
-                              </div>
+              {teamSearchLoading && <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 8 }}>Buscando candidatos...</div>}
 
-                              <span
-                                className={`text-xs font-medium px-2 py-0.5 rounded ${
-                                  isSelected ? "bg-blue-700 text-white" : "bg-gray-200 text-gray-700"
-                                }`}
-                              >
-                                {titleCount} títulos
-                              </span>
-                            </div>
-                          );
-                        })
-                    )}
-                  </div>
+              {teamSearchResults.length > 0 && (
+                <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6, maxHeight: 180, overflowY: "auto" }}>
+                  {teamSearchResults.map((club) => {
+                    const isAlreadyAdded = teamsList.some((t) => t.id === club.id);
+                    return (
+                      <div key={club.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", backgroundColor: theme.bgCard, borderRadius: 6, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, fontSize: 13 }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                          <img
+                            src={club.crestUrl || `/badges/${club.slug}.webp`}
+                            alt=""
+                            style={{ width: 24, height: 24, objectFit: "contain" }}
+                            onError={(e) => {
+                              (e.target as HTMLImageElement).style.visibility = "hidden";
+                            }}
+                          />
+                          <div>
+                            <span style={{ fontWeight: 600, color: theme.textPrimary }}>{club.fullName}</span>
+                            <span style={{ fontSize: 11, color: theme.textMuted, marginLeft: 6 }}>
+                              ({club.locality?.name}, {club.locality?.province?.name})
+                            </span>
+                          </div>
+                        </div>
+
+                        {isAlreadyAdded ? (
+                          <span style={{ fontSize: 11, fontWeight: 600, color: "#166534", backgroundColor: theme.darkMode ? "#14532d" : "#dcfce7", padding: "2px 8px", borderRadius: 4 }}>
+                            ✓ Añadido
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            disabled={teamActionId === club.id}
+                            onClick={() => handleAddTeamToTarget(club.id)}
+                            style={{ padding: "4px 10px", borderRadius: 6, backgroundColor: "#2563eb", color: "#ffffff", fontWeight: 700, fontSize: 12, border: "none", cursor: "pointer" }}
+                          >
+                            {teamActionId === club.id ? "Añadiendo..." : "+ Añadir"}
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
+              )}
+            </div>
 
-                <div>
-                  <label className="block text-xs font-bold uppercase tracking-wider text-gray-500 mb-1">
-                    Cantidad de Títulos
-                  </label>
-                  <input
-                    type="number"
-                    min="0"
-                    className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={titleCountInput}
-                    onChange={(e) => setTitleCountInput(Math.max(0, parseInt(e.target.value) || 0))}
-                  />
-                </div>
+            {/* Lista de Equipos Actuales */}
+            <div>
+              <h4 style={{ fontSize: 12, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+                Nómina de Equipos Inscritos ({teamsList.length})
+              </h4>
 
-                <div className="flex gap-2 pt-2">
-                  <button
-                    type="submit"
-                    disabled={titleSaving}
-                    className="flex-1 bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2.5 px-4 rounded-xl shadow-sm transition-colors text-sm"
-                  >
-                    {titleSaving ? "Guardando..." : "Guardar Título en el Club"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTitleModalOpen(false)}
-                    className="bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-2.5 px-4 rounded-xl transition-colors text-sm"
-                  >
-                    Cancelar
-                  </button>
+              {teamsLoading ? (
+                <div style={{ padding: 20, textAlign: "center", color: theme.textMuted, fontSize: 13, backgroundColor: theme.bgInput, borderRadius: 8, borderWidth: 1, borderStyle: "dashed", borderColor: theme.borderCol }}>
+                  Cargando equipos...
                 </div>
-              </form>
+              ) : teamsList.length === 0 ? (
+                <div style={{ padding: 20, textAlign: "center", color: theme.textMuted, fontSize: 13, backgroundColor: theme.bgInput, borderRadius: 8, borderWidth: 1, borderStyle: "dashed", borderColor: theme.borderCol }}>
+                  No hay equipos inscritos aún. Usá el buscador de arriba para añadir los primeros.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflowY: "auto" }}>
+                  {teamsList.map((club) => (
+                    <div key={club.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", backgroundColor: theme.bgCard, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, fontSize: 13 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <img
+                          src={club.crestUrl || `/badges/${club.slug}.webp`}
+                          alt=""
+                          style={{ width: 28, height: 28, objectFit: "contain" }}
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.visibility = "hidden";
+                          }}
+                        />
+                        <div>
+                          <div style={{ fontWeight: 600, color: theme.textPrimary }}>{club.fullName}</div>
+                          <div style={{ fontSize: 11, color: theme.textMuted }}>
+                            {club.locality?.name}, {club.locality?.province?.name}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        disabled={teamActionId === club.id}
+                        onClick={() => handleRemoveTeamFromTarget(club.id)}
+                        style={{ backgroundColor: "#fef2f2", color: "#dc2626", borderWidth: 1, borderStyle: "solid", borderColor: "#fca5a5", borderRadius: 6, padding: "4px 8px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                      >
+                        {teamActionId === club.id ? "Quitando..." : "Quitar"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
+              <button type="button" onClick={() => setTeamsModalOpen(false)} style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: theme.bgInput, color: theme.textPrimary, fontWeight: 600, fontSize: 13, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, cursor: "pointer" }}>
+                Cerrar
+              </button>
             </div>
           </div>
-        )}
-      </div>
-    </div>
+        </div>
+      )}
+
+      {/* Modal 2: Palmarés / Historial de Campeones */}
+      {championsModalOpen && (
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: "1rem" }}>
+          <div style={{ width: "100%", maxWidth: 640, backgroundColor: theme.bgCard, borderRadius: 16, padding: "1.5rem", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.3)", maxHeight: "90vh", overflowY: "auto", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1.25rem", paddingBottom: "0.75rem", borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: theme.borderCol }}>
+              <div>
+                <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0, color: theme.textPrimary }}>
+                  Palmarés & Historial de Campeones
+                </h3>
+                <div style={{ fontSize: 13, color: theme.textMuted, marginTop: 2 }}>
+                  Torneo / Liga: <strong style={{ color: theme.textPrimary }}>{championsTargetName}</strong>
+                </div>
+              </div>
+              <button type="button" onClick={() => setChampionsModalOpen(false)} style={{ border: "none", background: "transparent", color: theme.textMuted, cursor: "pointer", padding: 4, display: "flex" }}>
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Añadir Campeón */}
+            <div style={{ backgroundColor: theme.bgInput, padding: 14, borderRadius: 10, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, marginBottom: 16 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: theme.textPrimary, marginBottom: 6, display: "block" }}>
+                Registrar Club Campeón en &quot;{championsTargetName}&quot;
+              </label>
+
+              {!selectedClubForChamp ? (
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, backgroundColor: theme.bgCard, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 10, padding: "8px 12px" }}>
+                    <Search size={16} style={{ color: theme.textMuted }} />
+                    <input
+                      style={{ width: "100%", border: "none", outline: "none", fontSize: 14, color: theme.textPrimary, backgroundColor: "transparent" }}
+                      placeholder="Buscar club para asignar título..."
+                      value={champSearchQuery}
+                      onChange={(e) => setChampSearchQuery(e.target.value)}
+                    />
+                  </div>
+
+                  {champSearchResults.length > 0 && (
+                    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6, maxHeight: 150, overflowY: "auto" }}>
+                      {champSearchResults.map((club) => (
+                        <div
+                          key={club.id}
+                          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", backgroundColor: theme.bgCard, borderRadius: 6, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, fontSize: 13, cursor: "pointer" }}
+                          onClick={() => {
+                            setSelectedClubForChamp(club);
+                            setChampSearchQuery("");
+                            setChampSearchResults([]);
+                          }}
+                        >
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <img src={club.crestUrl || `/badges/${club.slug}.webp`} alt="" style={{ width: 20, height: 20, objectFit: "contain" }} />
+                            <span style={{ fontWeight: 600, fontSize: 13, color: theme.textPrimary }}>{club.fullName}</span>
+                          </div>
+                          <span style={{ fontSize: 12, color: "#2563eb", fontWeight: 600 }}>Seleccionar</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: theme.bgCard, padding: "8px 12px", borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                    <img src={selectedClubForChamp.crestUrl || `/badges/${selectedClubForChamp.slug}.webp`} alt="" style={{ width: 24, height: 24, objectFit: "contain" }} />
+                    <span style={{ fontWeight: 700, fontSize: 14, color: theme.textPrimary }}>{selectedClubForChamp.fullName}</span>
+                  </div>
+
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <input
+                      type="number"
+                      min="1"
+                      style={{ width: 70, padding: "4px 8px", borderRadius: 6, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, fontSize: 13 }}
+                      value={champTitleCount}
+                      onChange={(e) => setChampTitleCount(Math.max(1, parseInt(e.target.value) || 1))}
+                    />
+                    <span style={{ fontSize: 12, color: theme.textMuted }}>títulos</span>
+
+                    <button type="button" disabled={champSaving} onClick={handleSaveChampionTitle} style={{ padding: "5px 12px", borderRadius: 6, backgroundColor: "#2563eb", color: "#ffffff", fontWeight: 700, fontSize: 12, border: "none", cursor: "pointer" }}>
+                      {champSaving ? "Guardando..." : "Guardar Título"}
+                    </button>
+
+                    <button type="button" onClick={() => setSelectedClubForChamp(null)} style={{ border: "none", background: "transparent", cursor: "pointer", color: theme.textMuted }}>
+                      <X size={16} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Lista de Campeones Registrados */}
+            <div>
+              <h4 style={{ fontSize: 12, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+                Tabla de Campeones Registrados ({championsList.length})
+              </h4>
+
+              {championsLoading ? (
+                <div style={{ padding: 20, textAlign: "center", color: theme.textMuted, fontSize: 13, backgroundColor: theme.bgInput, borderRadius: 8, borderWidth: 1, borderStyle: "dashed", borderColor: theme.borderCol }}>
+                  Cargando palmarés...
+                </div>
+              ) : championsList.length === 0 ? (
+                <div style={{ padding: 20, textAlign: "center", color: theme.textMuted, fontSize: 13, backgroundColor: theme.bgInput, borderRadius: 8, borderWidth: 1, borderStyle: "dashed", borderColor: theme.borderCol }}>
+                  No hay campeones registrados para este torneo aún.
+                </div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 240, overflowY: "auto" }}>
+                  {championsList.map((c) => (
+                    <div key={c.titleId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", backgroundColor: theme.bgCard, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, fontSize: 13 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <img src={c.crestUrl} alt="" style={{ width: 28, height: 28, objectFit: "contain" }} />
+                        <div>
+                          <div style={{ fontWeight: 700, color: theme.textPrimary, fontSize: 14 }}>{c.clubName}</div>
+                          <div style={{ fontSize: 11, color: theme.textMuted }}>{c.clubFullName}</div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                        <span style={{ fontSize: 13, fontWeight: 800, color: "#2563eb" }}>
+                          🏆 {c.count} {c.count === 1 ? "título" : "títulos"}
+                        </span>
+                        <button type="button" onClick={() => handleDeleteChampionTitle(c.titleId)} style={{ backgroundColor: "#fef2f2", color: "#dc2626", borderWidth: 1, borderStyle: "solid", borderColor: "#fca5a5", borderRadius: 6, padding: "4px 8px", fontSize: 12, fontWeight: 600, cursor: "pointer" }}>
+                          Eliminar
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
+              <button type="button" onClick={() => setChampionsModalOpen(false)} style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: theme.bgInput, color: theme.textPrimary, fontWeight: 600, fontSize: 13, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, cursor: "pointer" }}>
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </AdminLayout>
   );
 }
-
-// --- Estilos CSS ---
-const s: Record<string, React.CSSProperties> = {
-  page: { minHeight: "100vh", background: "#f8fafc", paddingBottom: "3rem", fontFamily: "system-ui, sans-serif" },
-  container: { maxWidth: 1020, margin: "0 auto", padding: "0 1rem" },
-  header: { marginBottom: "1.25rem" },
-  title: { fontSize: "1.5rem", fontWeight: 700, color: "#0f172a", margin: 0 },
-  subtitle: { fontSize: "0.875rem", color: "#64748b", marginTop: 4 },
-  guideBox: {
-    background: "#eff6ff",
-    border: "1px solid #bfdbfe",
-    borderRadius: "0.75rem",
-    padding: "1rem 1.25rem",
-    marginBottom: "1.25rem",
-  },
-  guideTitle: {
-    fontSize: "0.875rem",
-    fontWeight: 700,
-    color: "#1e40af",
-    marginBottom: "0.5rem",
-  },
-  guideGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))",
-    gap: "0.4rem 1rem",
-    fontSize: "0.8rem",
-    color: "#1e3a8a",
-  },
-  tabsWrap: {
-    display: "flex",
-    gap: "0.5rem",
-    marginBottom: "1.25rem",
-    borderBottom: "1px solid #e2e8f0",
-    paddingBottom: "0.5rem",
-  },
-  tabButton: {
-    padding: "0.6rem 1.1rem",
-    borderRadius: "0.5rem",
-    fontSize: "0.875rem",
-    fontWeight: 600,
-    color: "#64748b",
-    background: "#f1f5f9",
-    borderWidth: "1px",
-    borderStyle: "solid",
-    borderColor: "#cbd5e1",
-    cursor: "pointer",
-    transition: "all 0.15s ease",
-  },
-  activeTabButton: {
-    color: "#0f172a",
-    background: "#ffffff",
-    borderColor: "#0f172a",
-    boxShadow: "0 1px 3px rgba(0,0,0,0.08)",
-  },
-  section: {
-    background: "#ffffff",
-    border: "1px solid #e2e8f0",
-    borderRadius: "0.75rem",
-    padding: "1.25rem",
-    marginBottom: "1rem",
-    boxShadow: "0 1px 2px rgba(0,0,0,0.03)",
-  },
-  sectionTitle: {
-    fontSize: "0.75rem",
-    fontWeight: 700,
-    color: "#475569",
-    textTransform: "uppercase",
-    letterSpacing: "0.05em",
-    marginBottom: 14,
-    paddingBottom: 6,
-    borderBottom: "1px solid #f1f5f9",
-  },
-  grid2: { display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" },
-  field: { display: "flex", flexDirection: "column", gap: 5 },
-  label: { fontSize: "0.75rem", fontWeight: 600, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em" },
-  input: {
-    width: "100%",
-    border: "1px solid #cbd5e1",
-    borderRadius: "0.5rem",
-    padding: "8px 12px",
-    fontSize: "0.875rem",
-    color: "#0f172a",
-    outline: "none",
-  },
-  select: {
-    width: "100%",
-    border: "1px solid #cbd5e1",
-    borderRadius: "0.5rem",
-    padding: "8px 12px",
-    fontSize: "0.875rem",
-    color: "#0f172a",
-    backgroundColor: "#ffffff",
-    outline: "none",
-  },
-  autoSlugPreview: {
-    background: "#f1f5f9",
-    border: "1px solid #e2e8f0",
-    borderRadius: "0.5rem",
-    padding: "6px 12px",
-    display: "flex",
-    alignItems: "center",
-  },
-  infoCard: {
-    background: "#f0f9ff",
-    border: "1px solid #bae6fd",
-    borderRadius: "0.5rem",
-    padding: "10px 14px",
-  },
-  btnPrimary: {
-    padding: "10px 18px",
-    background: "#0f172a",
-    color: "#ffffff",
-    border: "none",
-    borderRadius: "0.5rem",
-    cursor: "pointer",
-    fontWeight: 600,
-    fontSize: "0.875rem",
-  },
-  btnSecondary: {
-    padding: "8px 14px",
-    background: "#ffffff",
-    color: "#334155",
-    border: "1px solid #cbd5e1",
-    borderRadius: "0.5rem",
-    cursor: "pointer",
-    fontWeight: 500,
-    fontSize: "0.875rem",
-  },
-  btnSmall: {
-    padding: "4px 10px",
-    background: "#ffffff",
-    color: "#0f172a",
-    border: "1px solid #e2e8f0",
-    borderRadius: "0.375rem",
-    cursor: "pointer",
-    fontSize: "0.75rem",
-    fontWeight: 500,
-    marginLeft: 6,
-  },
-  tableWrap: { overflowX: "auto" },
-  table: { width: "100%", borderCollapse: "collapse", fontSize: "0.875rem" },
-  th: {
-    textAlign: "left",
-    padding: "10px 12px",
-    borderBottom: "1px solid #e2e8f0",
-    color: "#64748b",
-    fontWeight: 600,
-    fontSize: "0.75rem",
-    textTransform: "uppercase",
-  },
-  tr: { borderBottom: "1px solid #f1f5f9" },
-  td: { padding: "10px 12px", verticalAlign: "middle" },
-  miniLogoBox: {
-    width: 28,
-    height: 28,
-    borderRadius: 4,
-    background: "#f8fafc",
-    border: "1px solid #e2e8f0",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-  },
-  levelBadge: {
-    display: "inline-block",
-    padding: "2px 8px",
-    borderRadius: "12px",
-    background: "#f1f5f9",
-    color: "#334155",
-    fontSize: "0.75rem",
-    fontWeight: 700,
-  },
-  provBadge: {
-    display: "inline-block",
-    padding: "2px 8px",
-    borderRadius: "12px",
-    background: "#f0fdf4",
-    border: "1px solid #bbf7d0",
-    color: "#166534",
-    fontSize: "0.75rem",
-    fontWeight: 600,
-  },
-  typeBadge: {
-    display: "inline-block",
-    padding: "2px 8px",
-    borderRadius: "12px",
-    fontSize: "0.7rem",
-    fontWeight: 700,
-  },
-  badgeBox: {
-    width: 72,
-    height: 72,
-    border: "1px solid #e2e8f0",
-    borderRadius: "0.5rem",
-    background: "#f8fafc",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    overflow: "hidden",
-    flexShrink: 0,
-  },
-  badgeImg: { width: "100%", height: "100%", objectFit: "contain", padding: 4 },
-  formHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    background: "#ffffff",
-    padding: "1rem 1.25rem",
-    borderRadius: "0.75rem",
-    border: "1px solid #e2e8f0",
-    marginBottom: "1rem",
-  },
-  alertSuccess: {
-    padding: "12px 16px",
-    background: "#f0fdf4",
-    color: "#166534",
-    border: "1px solid #bbf7d0",
-    borderRadius: "0.5rem",
-    marginBottom: "1rem",
-    fontSize: "0.875rem",
-  },
-  alertError: {
-    padding: "12px 16px",
-    background: "#fef2f2",
-    color: "#991b1b",
-    border: "1px solid #fecaca",
-    borderRadius: "0.5rem",
-    marginBottom: "1rem",
-    fontSize: "0.875rem",
-  },
-  form: { display: "flex", flexDirection: "column", gap: "0.5rem" },
-};

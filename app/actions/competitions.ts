@@ -358,3 +358,224 @@ export async function getClubsByLeagueId(localLeagueId: string) {
     return [];
   }
 }
+
+export async function getClubsByCompetitionId(competitionId: string) {
+  try {
+    const comp = await prisma.competition.findUnique({
+      where: { id: competitionId },
+      select: {
+        clubs: {
+          select: {
+            id: true,
+            fullName: true,
+            shortName: true,
+            slug: true,
+            crestUrl: true,
+            locality: {
+              select: {
+                name: true,
+                province: { select: { name: true } },
+              },
+            },
+          },
+          orderBy: { fullName: "asc" },
+        },
+      },
+    });
+    return comp?.clubs || [];
+  } catch (error) {
+    console.error("Error fetching clubs for competition:", error);
+    return [];
+  }
+}
+
+export async function addClubToCompetition(competitionId: string, clubId: string) {
+  try {
+    if (!competitionId || !clubId) return { error: "Identificadores inválidos." };
+    await prisma.competition.update({
+      where: { id: competitionId },
+      data: {
+        clubs: {
+          connect: { id: clubId },
+        },
+      },
+    });
+    return { success: true };
+  } catch (error: unknown) {
+    const err = error as { message?: string };
+    return { error: err.message || "Error al agregar el club a la competencia." };
+  }
+}
+
+export async function removeClubFromCompetition(competitionId: string, clubId: string) {
+  try {
+    if (!competitionId || !clubId) return { error: "Identificadores inválidos." };
+    await prisma.competition.update({
+      where: { id: competitionId },
+      data: {
+        clubs: {
+          disconnect: { id: clubId },
+        },
+      },
+    });
+    return { success: true };
+  } catch (error: unknown) {
+    const err = error as { message?: string };
+    return { error: err.message || "Error al remover el club de la competencia." };
+  }
+}
+
+export async function addClubToLocalLeague(localLeagueId: string, clubId: string) {
+  try {
+    if (!localLeagueId || !clubId) return { error: "Identificadores inválidos." };
+    await prisma.club.update({
+      where: { id: clubId },
+      data: { localLeagueId },
+    });
+    return { success: true };
+  } catch (error: unknown) {
+    const err = error as { message?: string };
+    return { error: err.message || "Error al agregar el club a la liga regional." };
+  }
+}
+
+export async function removeClubFromLocalLeague(clubId: string) {
+  try {
+    if (!clubId) return { error: "Identificador de club inválido." };
+    await prisma.club.update({
+      where: { id: clubId },
+      data: { localLeagueId: null },
+    });
+    return { success: true };
+  } catch (error: unknown) {
+    const err = error as { message?: string };
+    return { error: err.message || "Error al remover el club de la liga regional." };
+  }
+}
+
+export async function searchClubsForSelection(query: string) {
+  if (!query || query.trim().length < 2) return [];
+
+  const qNorm = query.toLowerCase().normalize("NFD").replace(/\p{Diacritic}/gu, "").trim();
+
+  try {
+    const rawClubs = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT c.id
+      FROM "Club" c
+      INNER JOIN "Locality" l ON l.id = c."localityId"
+      INNER JOIN "Province" p ON p.id = l."provinceId"
+      WHERE translate(LOWER(c."fullName"), 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunAEIOUUN') LIKE ${'%' + qNorm + '%'}
+         OR translate(LOWER(COALESCE(c."shortName", '')), 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunAEIOUUN') LIKE ${'%' + qNorm + '%'}
+         OR translate(LOWER(COALESCE(c.nickname, '')), 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunAEIOUUN') LIKE ${'%' + qNorm + '%'}
+         OR translate(LOWER(c.slug), 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunAEIOUUN') LIKE ${'%' + qNorm + '%'}
+         OR translate(LOWER(l.name), 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunAEIOUUN') LIKE ${'%' + qNorm + '%'}
+         OR translate(LOWER(p.name), 'áéíóúüñÁÉÍÓÚÜÑ', 'aeiouunAEIOUUN') LIKE ${'%' + qNorm + '%'}
+      ORDER BY c."fullName" ASC
+      LIMIT 15
+    `;
+
+    const clubIds = rawClubs.map((c) => c.id);
+    if (!clubIds || clubIds.length === 0) return [];
+
+    const fullClubs = await prisma.club.findMany({
+      where: { id: { in: clubIds } },
+      select: {
+        id: true,
+        fullName: true,
+        shortName: true,
+        slug: true,
+        crestUrl: true,
+        localLeagueId: true,
+        locality: {
+          select: {
+            name: true,
+            province: { select: { name: true } },
+          },
+        },
+      },
+    });
+
+    const map = new Map(fullClubs.map((c) => [c.id, c]));
+    return clubIds.map((id) => map.get(id)).filter(Boolean);
+  } catch (e) {
+    console.warn("Fallback to prisma findMany for club selection search:", e);
+    return prisma.club.findMany({
+      where: {
+        OR: [
+          { fullName: { contains: query, mode: "insensitive" } },
+          { shortName: { contains: query, mode: "insensitive" } },
+          { slug: { contains: query, mode: "insensitive" } },
+        ],
+      },
+      select: {
+        id: true,
+        fullName: true,
+        shortName: true,
+        slug: true,
+        crestUrl: true,
+        localLeagueId: true,
+        locality: {
+          select: {
+            name: true,
+            province: { select: { name: true } },
+          },
+        },
+      },
+      take: 15,
+    });
+  }
+}
+
+export async function getCompetitionChampions(targetName: string) {
+  try {
+    if (!targetName) return [];
+    const titles = await prisma.title.findMany({
+      where: {
+        name: { equals: targetName.trim(), mode: "insensitive" },
+      },
+      include: {
+        club: {
+          select: {
+            id: true,
+            fullName: true,
+            shortName: true,
+            slug: true,
+            crestUrl: true,
+            locality: {
+              select: {
+                name: true,
+                province: { select: { name: true } },
+              },
+            },
+          },
+        },
+      },
+      orderBy: { count: "desc" },
+    });
+
+    return titles.map((t) => ({
+      titleId: t.id,
+      clubId: t.club.id,
+      clubSlug: t.club.slug,
+      clubName: t.club.shortName || t.club.fullName,
+      clubFullName: t.club.fullName,
+      crestUrl: t.club.crestUrl || `/badges/${t.club.slug}.webp`,
+      titleName: t.name,
+      count: t.count,
+      locality: t.club.locality,
+    }));
+  } catch (error) {
+    return [];
+  }
+}
+
+export async function deleteTitleById(titleId: string) {
+  try {
+    if (!titleId) return { error: "ID de título no especificado." };
+    await prisma.title.delete({ where: { id: titleId } });
+    return { success: true };
+  } catch (error: unknown) {
+    const err = error as { message?: string };
+    return { error: err.message || "Error al eliminar el título." };
+  }
+}
