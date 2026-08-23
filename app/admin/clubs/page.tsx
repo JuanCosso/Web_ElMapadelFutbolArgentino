@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect, useMemo } from "react";
-import { AdminLayout, useAdminTheme } from "@/components/admin/AdminLayout";
+import { AdminLayout } from "@/components/admin/AdminLayout";
 import { getAdminFormData, searchFullClubsForAdmin, getClubLocation } from "@/app/actions/admin";
 import {
   Search,
@@ -10,7 +10,6 @@ import {
   Trophy,
   Plus,
   Edit3,
-  Trash2,
   X,
   ChevronLeft,
   ChevronRight,
@@ -39,14 +38,14 @@ function buildId(province: string, league: string, name: string) {
   return [slugify(province), slugify(league), slugify(name)].filter(Boolean).join("__");
 }
 
-function highlight(text: string, query: string, highlightColor: string = "#2563eb") {
+function highlight(text: string, query: string) {
   if (!query) return <>{text}</>;
   const idx = norm(text).indexOf(norm(query));
   if (idx === -1) return <>{text}</>;
   return (
     <>
       {text.slice(0, idx)}
-      <strong style={{ fontWeight: 700, color: highlightColor }}>{text.slice(idx, idx + query.length)}</strong>
+      <strong style={{ fontWeight: 700, color: "#2563eb" }}>{text.slice(idx, idx + query.length)}</strong>
       {text.slice(idx + query.length)}
     </>
   );
@@ -98,7 +97,6 @@ function AutoField({
   customValue?: string;
   onCustomChange?: (val: string) => void;
 }) {
-  const theme = useAdminTheme();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const wrap = useRef<HTMLDivElement>(null);
@@ -137,7 +135,7 @@ function AutoField({
 
   return (
     <div ref={wrap} style={{ position: "relative", display: "flex", flexDirection: "column", gap: 5 }}>
-      <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+      <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
         {label}
       </label>
       <input
@@ -145,12 +143,12 @@ function AutoField({
           width: "100%",
           borderWidth: 1,
           borderStyle: "solid",
-          borderColor: theme.borderCol,
+          borderColor: "#cbd5e1",
           borderRadius: 8,
           padding: "9px 12px",
           fontSize: 14,
-          color: disabled ? theme.textMuted : theme.textPrimary,
-          backgroundColor: disabled ? (theme.darkMode ? "#1e293b" : "#f1f5f9") : theme.bgInput,
+          color: disabled ? "#94a3b8" : "#0f172a",
+          backgroundColor: disabled ? "#f1f5f9" : "#ffffff",
           outline: "none",
         }}
         value={displayVal}
@@ -184,12 +182,12 @@ function AutoField({
             top: "100%",
             left: 0,
             right: 0,
-            backgroundColor: theme.bgCard,
+            backgroundColor: "#ffffff",
             borderWidth: 1,
             borderStyle: "solid",
-            borderColor: theme.borderCol,
+            borderColor: "#cbd5e1",
             borderRadius: 8,
-            boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+            boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
             zIndex: 50,
             maxHeight: 180,
             overflowY: "auto",
@@ -202,7 +200,7 @@ function AutoField({
               style={{
                 padding: "8px 12px",
                 fontSize: 13,
-                color: theme.textPrimary,
+                color: "#0f172a",
                 cursor: "pointer",
               }}
               onMouseDown={(e) => {
@@ -225,7 +223,7 @@ function AutoField({
                 fontWeight: 600,
                 borderTopWidth: matches.length > 0 ? 1 : 0,
                 borderTopStyle: "solid",
-                borderTopColor: theme.borderCol,
+                borderTopColor: "#e2e8f0",
                 cursor: "pointer",
               }}
               onMouseDown={(e) => {
@@ -268,8 +266,6 @@ type ClubAdminItem = {
 };
 
 export default function ClubManagerPage() {
-  const theme = useAdminTheme();
-
   const [mode, setMode] = useState<"IDLE" | "CREATE" | "EDIT">("IDLE");
 
   const [provinces, setProvinces] = useState<Option[]>([]);
@@ -534,6 +530,13 @@ export default function ClubManagerPage() {
         if (results) setInitialClubs(results as ClubAdminItem[]);
       });
 
+      getAdminFormData().then((data) => {
+        setProvinces(data.provinces);
+        setLocalities(data.localities);
+        setLeagues(data.leagues);
+        setCompetitions(data.competitions as CompetitionOption[]);
+      });
+
       setStatus({ type: "success", msg: `Club guardado exitosamente: ${data.slug}` });
       if (mode === "CREATE") resetForm();
     } catch (err: unknown) {
@@ -570,19 +573,20 @@ export default function ClubManagerPage() {
           {/* Card de Filtros */}
           <div
             style={{
-              backgroundColor: theme.bgCard,
+              backgroundColor: "#ffffff",
               borderRadius: 14,
               borderWidth: 1,
               borderStyle: "solid",
-              borderColor: theme.borderCol,
+              borderColor: "#e2e8f0",
               padding: "1.25rem",
               marginBottom: "1.5rem",
+              boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
             }}
           >
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
               {/* Buscador */}
               <div style={{ display: "flex", flexDirection: "column", gap: 5, flex: 2, minWidth: 260 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                   Buscar Club
                 </label>
                 <div
@@ -590,22 +594,22 @@ export default function ClubManagerPage() {
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
-                    backgroundColor: theme.bgInput,
+                    backgroundColor: "#ffffff",
                     borderWidth: 1,
                     borderStyle: "solid",
-                    borderColor: theme.borderCol,
+                    borderColor: "#cbd5e1",
                     borderRadius: 10,
                     padding: "8px 12px",
                   }}
                 >
-                  <Search size={17} style={{ color: theme.textMuted, flexShrink: 0 }} />
+                  <Search size={17} style={{ color: "#94a3b8", flexShrink: 0 }} />
                   <input
                     style={{
                       width: "100%",
                       border: "none",
                       outline: "none",
                       fontSize: 14,
-                      color: theme.textPrimary,
+                      color: "#0f172a",
                       backgroundColor: "transparent",
                     }}
                     value={searchQuery}
@@ -616,7 +620,7 @@ export default function ClubManagerPage() {
                     <button
                       type="button"
                       onClick={() => setSearchQuery("")}
-                      style={{ border: "none", background: "transparent", cursor: "pointer", color: theme.textMuted, display: "flex" }}
+                      style={{ border: "none", background: "transparent", cursor: "pointer", color: "#94a3b8", display: "flex" }}
                     >
                       <X size={14} />
                     </button>
@@ -626,7 +630,7 @@ export default function ClubManagerPage() {
 
               {/* Filtro Provincia */}
               <div style={{ display: "flex", flexDirection: "column", gap: 5, flex: 1, minWidth: 180 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                   Provincia
                 </label>
                 <div
@@ -634,22 +638,22 @@ export default function ClubManagerPage() {
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
-                    backgroundColor: theme.bgInput,
+                    backgroundColor: "#ffffff",
                     borderWidth: 1,
                     borderStyle: "solid",
-                    borderColor: theme.borderCol,
+                    borderColor: "#cbd5e1",
                     borderRadius: 10,
                     padding: "8px 12px",
                   }}
                 >
-                  <MapPin size={16} style={{ color: theme.textMuted, flexShrink: 0 }} />
+                  <MapPin size={16} style={{ color: "#94a3b8", flexShrink: 0 }} />
                   <select
                     style={{
                       width: "100%",
                       border: "none",
                       outline: "none",
                       fontSize: 14,
-                      color: theme.textPrimary,
+                      color: "#0f172a",
                       backgroundColor: "transparent",
                       cursor: "pointer",
                     }}
@@ -659,11 +663,9 @@ export default function ClubManagerPage() {
                       setCurrentPage(1);
                     }}
                   >
-                    <option value="" style={{ backgroundColor: theme.bgCard, color: theme.textPrimary }}>
-                      Todas las provincias
-                    </option>
+                    <option value="">Todas las provincias</option>
                     {provinces.map((p) => (
-                      <option key={p.id} value={p.id} style={{ backgroundColor: theme.bgCard, color: theme.textPrimary }}>
+                      <option key={p.id} value={p.id}>
                         {p.name}
                       </option>
                     ))}
@@ -673,7 +675,7 @@ export default function ClubManagerPage() {
 
               {/* Filtro Categoría / Torneo */}
               <div style={{ display: "flex", flexDirection: "column", gap: 5, flex: 1, minWidth: 180 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                   Categoría / Torneo
                 </label>
                 <div
@@ -681,22 +683,22 @@ export default function ClubManagerPage() {
                     display: "flex",
                     alignItems: "center",
                     gap: 8,
-                    backgroundColor: theme.bgInput,
+                    backgroundColor: "#ffffff",
                     borderWidth: 1,
                     borderStyle: "solid",
-                    borderColor: theme.borderCol,
+                    borderColor: "#cbd5e1",
                     borderRadius: 10,
                     padding: "8px 12px",
                   }}
                 >
-                  <Trophy size={16} style={{ color: theme.textMuted, flexShrink: 0 }} />
+                  <Trophy size={16} style={{ color: "#94a3b8", flexShrink: 0 }} />
                   <select
                     style={{
                       width: "100%",
                       border: "none",
                       outline: "none",
                       fontSize: 14,
-                      color: theme.textPrimary,
+                      color: "#0f172a",
                       backgroundColor: "transparent",
                       cursor: "pointer",
                     }}
@@ -706,15 +708,11 @@ export default function ClubManagerPage() {
                       setCurrentPage(1);
                     }}
                   >
-                    <option value="" style={{ backgroundColor: theme.bgCard, color: theme.textPrimary }}>
-                      Todas las categorías
-                    </option>
-                    <option value="AFA" style={{ backgroundColor: theme.bgCard, color: theme.textPrimary }}>
-                      Directamente Afiliados a AFA
-                    </option>
+                    <option value="">Todas las categorías</option>
+                    <option value="AFA">Directamente Afiliados a AFA</option>
                     <optgroup label="Torneos Oficiales">
                       {competitions.map((c) => (
-                        <option key={c.id} value={c.id} style={{ backgroundColor: theme.bgCard, color: theme.textPrimary }}>
+                        <option key={c.id} value={c.id}>
                           {c.name} {c.level ? `(Nivel ${c.level})` : ""}
                         </option>
                       ))}
@@ -734,7 +732,7 @@ export default function ClubManagerPage() {
                 paddingTop: 12,
                 borderTopWidth: 1,
                 borderTopStyle: "solid",
-                borderTopColor: theme.borderCol,
+                borderTopColor: "#f1f5f9",
                 flexWrap: "wrap",
                 gap: 10,
               }}
@@ -742,7 +740,7 @@ export default function ClubManagerPage() {
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
                 {(selectedProvinceFilter || selectedCompFilter || searchQuery) && (
                   <>
-                    <span style={{ fontSize: 12, fontWeight: 600, color: theme.textMuted }}>Filtros activos:</span>
+                    <span style={{ fontSize: 12, fontWeight: 600, color: "#64748b" }}>Filtros activos:</span>
 
                     {activeProvinceName && (
                       <span
@@ -752,11 +750,11 @@ export default function ClubManagerPage() {
                           gap: 6,
                           padding: "3px 10px",
                           borderRadius: 20,
-                          backgroundColor: theme.darkMode ? "#1e3a8a" : "#eff6ff",
+                          backgroundColor: "#eff6ff",
                           borderWidth: 1,
                           borderStyle: "solid",
-                          borderColor: theme.darkMode ? "#3b82f6" : "#bfdbfe",
-                          color: theme.darkMode ? "#93c5fd" : "#1e40af",
+                          borderColor: "#bfdbfe",
+                          color: "#1e40af",
                           fontSize: 12,
                           fontWeight: 600,
                         }}
@@ -780,11 +778,11 @@ export default function ClubManagerPage() {
                           gap: 6,
                           padding: "3px 10px",
                           borderRadius: 20,
-                          backgroundColor: theme.darkMode ? "#1e3a8a" : "#eff6ff",
+                          backgroundColor: "#eff6ff",
                           borderWidth: 1,
                           borderStyle: "solid",
-                          borderColor: theme.darkMode ? "#3b82f6" : "#bfdbfe",
-                          color: theme.darkMode ? "#93c5fd" : "#1e40af",
+                          borderColor: "#bfdbfe",
+                          color: "#1e40af",
                           fontSize: 12,
                           fontWeight: 600,
                         }}
@@ -808,11 +806,11 @@ export default function ClubManagerPage() {
                           gap: 6,
                           padding: "3px 10px",
                           borderRadius: 20,
-                          backgroundColor: theme.darkMode ? "#1e3a8a" : "#eff6ff",
+                          backgroundColor: "#eff6ff",
                           borderWidth: 1,
                           borderStyle: "solid",
-                          borderColor: theme.darkMode ? "#3b82f6" : "#bfdbfe",
-                          color: theme.darkMode ? "#93c5fd" : "#1e40af",
+                          borderColor: "#bfdbfe",
+                          color: "#1e40af",
                           fontSize: 12,
                           fontWeight: 600,
                         }}
@@ -846,8 +844,8 @@ export default function ClubManagerPage() {
 
               {/* Botones de Vista Grid / Lista */}
               <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                <span style={{ fontSize: 12, color: theme.textMuted, marginRight: 6 }}>
-                  Mostrando <strong style={{ color: theme.textPrimary }}>{filteredClubs.length}</strong> clubes
+                <span style={{ fontSize: 12, color: "#64748b", marginRight: 6 }}>
+                  Mostrando <strong style={{ color: "#0f172a" }}>{filteredClubs.length}</strong> clubes
                 </span>
                 <button
                   type="button"
@@ -858,9 +856,9 @@ export default function ClubManagerPage() {
                     borderRadius: 8,
                     borderWidth: 1,
                     borderStyle: "solid",
-                    borderColor: theme.borderCol,
-                    backgroundColor: viewMode === "grid" ? "#2563eb" : theme.bgInput,
-                    color: viewMode === "grid" ? "#ffffff" : theme.textMuted,
+                    borderColor: "#e2e8f0",
+                    backgroundColor: viewMode === "grid" ? "#0f172a" : "#ffffff",
+                    color: viewMode === "grid" ? "#ffffff" : "#64748b",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -879,9 +877,9 @@ export default function ClubManagerPage() {
                     borderRadius: 8,
                     borderWidth: 1,
                     borderStyle: "solid",
-                    borderColor: theme.borderCol,
-                    backgroundColor: viewMode === "list" ? "#2563eb" : theme.bgInput,
-                    color: viewMode === "list" ? "#ffffff" : theme.textMuted,
+                    borderColor: "#e2e8f0",
+                    backgroundColor: viewMode === "list" ? "#0f172a" : "#ffffff",
+                    color: viewMode === "list" ? "#ffffff" : "#64748b",
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
@@ -901,16 +899,16 @@ export default function ClubManagerPage() {
               style={{
                 textAlign: "center",
                 padding: "3rem 1rem",
-                backgroundColor: theme.bgCard,
+                backgroundColor: "#ffffff",
                 borderRadius: 14,
                 borderWidth: 1,
                 borderStyle: "solid",
-                borderColor: theme.borderCol,
+                borderColor: "#e2e8f0",
               }}
             >
-              <Shield size={36} style={{ color: theme.textMuted, marginBottom: 10 }} />
-              <div style={{ fontWeight: 700, fontSize: 16, color: theme.textPrimary }}>No se encontraron clubes</div>
-              <div style={{ fontSize: 13, color: theme.textMuted, marginTop: 4 }}>
+              <Shield size={36} style={{ color: "#94a3b8", marginBottom: 10 }} />
+              <div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a" }}>No se encontraron clubes</div>
+              <div style={{ fontSize: 13, color: "#64748b", marginTop: 4 }}>
                 Intenta ajustando los filtros o realizando una búsqueda distinta.
               </div>
             </div>
@@ -923,16 +921,16 @@ export default function ClubManagerPage() {
                   <div
                     key={club.id}
                     style={{
-                      backgroundColor: theme.bgCard,
+                      backgroundColor: "#ffffff",
                       borderRadius: 14,
                       borderWidth: 1,
                       borderStyle: "solid",
-                      borderColor: theme.borderCol,
+                      borderColor: "#e2e8f0",
                       borderTopWidth: 4,
                       borderTopStyle: "solid",
                       borderTopColor: accentColor,
                       padding: "1.1rem",
-                      boxShadow: theme.darkMode ? "0 2px 6px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.04)",
+                      boxShadow: "0 1px 3px rgba(0,0,0,0.04)",
                       cursor: "pointer",
                       display: "flex",
                       flexDirection: "column",
@@ -954,11 +952,11 @@ export default function ClubManagerPage() {
                       />
 
                       <div style={{ minWidth: 0, flex: 1 }}>
-                        <div style={{ fontWeight: 700, fontSize: 15, color: theme.textPrimary, lineHeight: 1.25 }}>
-                          {highlight(club.fullName, searchQuery, theme.darkMode ? "#60a5fa" : "#2563eb")}
+                        <div style={{ fontWeight: 700, fontSize: 15, color: "#0f172a", lineHeight: 1.25 }}>
+                          {highlight(club.fullName, searchQuery)}
                         </div>
-                        <div style={{ fontSize: 12, color: theme.textMuted, display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
-                          <MapPin size={12} style={{ flexShrink: 0, color: theme.textMuted }} />
+                        <div style={{ fontSize: 12, color: "#64748b", display: "flex", alignItems: "center", gap: 4, marginTop: 4 }}>
+                          <MapPin size={12} style={{ flexShrink: 0, color: "#94a3b8" }} />
                           <span style={{ textOverflow: "ellipsis", overflow: "hidden", whiteSpace: "nowrap" }}>
                             {club.locality?.name}, {club.locality?.province?.name}
                           </span>
@@ -966,7 +964,7 @@ export default function ClubManagerPage() {
                       </div>
                     </div>
 
-                    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", paddingTop: 10, borderTopWidth: 1, borderTopStyle: "solid", borderTopColor: theme.borderCol }}>
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", paddingTop: 10, borderTopWidth: 1, borderTopStyle: "solid", borderTopColor: "#f1f5f9" }}>
                       <span style={{ fontSize: 12, fontWeight: 600, color: "#2563eb" }}>
                         Editar datos →
                       </span>
@@ -981,8 +979,8 @@ export default function ClubManagerPage() {
                   borderRadius: 14,
                   borderWidth: 2,
                   borderStyle: "dashed",
-                  borderColor: theme.darkMode ? "#3b82f6" : "#bfdbfe",
-                  backgroundColor: theme.darkMode ? "#1e3a8a" : "#f0f9ff",
+                  borderColor: "#bfdbfe",
+                  backgroundColor: "#f0f9ff",
                   padding: "1.5rem 1rem",
                   display: "flex",
                   flexDirection: "column",
@@ -1007,10 +1005,10 @@ export default function ClubManagerPage() {
                 >
                   <Plus size={22} />
                 </div>
-                <div style={{ fontWeight: 700, fontSize: 15, color: theme.darkMode ? "#93c5fd" : "#2563eb", marginTop: 10 }}>
+                <div style={{ fontWeight: 700, fontSize: 15, color: "#2563eb", marginTop: 10 }}>
                   Registrar Club
                 </div>
-                <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 2, textAlign: "center" }}>
+                <div style={{ fontSize: 12, color: "#64748b", marginTop: 2, textAlign: "center" }}>
                   Añade una nueva institución al sistema nacional.
                 </div>
               </div>
@@ -1022,11 +1020,11 @@ export default function ClubManagerPage() {
                 <div
                   key={club.id}
                   style={{
-                    backgroundColor: theme.bgCard,
+                    backgroundColor: "#ffffff",
                     borderRadius: 10,
                     borderWidth: 1,
                     borderStyle: "solid",
-                    borderColor: theme.borderCol,
+                    borderColor: "#e2e8f0",
                     padding: "10px 14px",
                     display: "flex",
                     alignItems: "center",
@@ -1045,10 +1043,10 @@ export default function ClubManagerPage() {
                       }}
                     />
                     <div>
-                      <div style={{ fontWeight: 700, fontSize: 15, color: theme.textPrimary }}>
-                        {highlight(club.fullName, searchQuery, theme.darkMode ? "#60a5fa" : "#2563eb")}
+                      <div style={{ fontWeight: 700, fontSize: 15, color: "#0f172a" }}>
+                        {highlight(club.fullName, searchQuery)}
                       </div>
-                      <div style={{ fontSize: 13, color: theme.textMuted, display: "flex", alignItems: "center", gap: 4 }}>
+                      <div style={{ fontSize: 13, color: "#64748b", display: "flex", alignItems: "center", gap: 4 }}>
                         <MapPin size={12} />
                         {club.locality?.name}, {club.locality?.province?.name}
                       </div>
@@ -1058,7 +1056,7 @@ export default function ClubManagerPage() {
                   <button
                     type="button"
                     onClick={() => handleEdit(club)}
-                    style={{ border: "none", background: "transparent", color: theme.textMuted, cursor: "pointer", padding: 4, display: "flex" }}
+                    style={{ border: "none", background: "transparent", color: "#64748b", cursor: "pointer", padding: 4, display: "flex" }}
                   >
                     <Edit3 size={16} />
                   </button>
@@ -1080,9 +1078,9 @@ export default function ClubManagerPage() {
                   borderRadius: 8,
                   borderWidth: 1,
                   borderStyle: "solid",
-                  borderColor: theme.borderCol,
-                  backgroundColor: theme.bgCard,
-                  color: theme.textMuted,
+                  borderColor: "#e2e8f0",
+                  backgroundColor: "#ffffff",
+                  color: "#64748b",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -1103,9 +1101,9 @@ export default function ClubManagerPage() {
                     borderRadius: 8,
                     borderWidth: 1,
                     borderStyle: "solid",
-                    borderColor: currentPage === page ? "#2563eb" : theme.borderCol,
-                    backgroundColor: currentPage === page ? "#2563eb" : theme.bgCard,
-                    color: currentPage === page ? "#ffffff" : theme.textPrimary,
+                    borderColor: currentPage === page ? "#2563eb" : "#e2e8f0",
+                    backgroundColor: currentPage === page ? "#2563eb" : "#ffffff",
+                    color: currentPage === page ? "#ffffff" : "#0f172a",
                     fontSize: 13,
                     fontWeight: 600,
                     cursor: "pointer",
@@ -1125,9 +1123,9 @@ export default function ClubManagerPage() {
                   borderRadius: 8,
                   borderWidth: 1,
                   borderStyle: "solid",
-                  borderColor: theme.borderCol,
-                  backgroundColor: theme.bgCard,
-                  color: theme.textMuted,
+                  borderColor: "#e2e8f0",
+                  backgroundColor: "#ffffff",
+                  color: "#64748b",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
@@ -1146,13 +1144,13 @@ export default function ClubManagerPage() {
         <form
           onSubmit={handleSubmit}
           style={{
-            backgroundColor: theme.bgCard,
+            backgroundColor: "#ffffff",
             borderRadius: 16,
             borderWidth: 1,
             borderStyle: "solid",
-            borderColor: theme.borderCol,
+            borderColor: "#e2e8f0",
             padding: "1.5rem",
-            boxShadow: "0 4px 6px rgba(0,0,0,0.05)",
+            boxShadow: "0 4px 6px rgba(0,0,0,0.03)",
           }}
         >
           <div
@@ -1164,14 +1162,14 @@ export default function ClubManagerPage() {
               paddingBottom: "1rem",
               borderBottomWidth: 1,
               borderBottomStyle: "solid",
-              borderBottomColor: theme.borderCol,
+              borderBottomColor: "#e2e8f0",
             }}
           >
             <div>
-              <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: theme.textPrimary }}>
+              <h2 style={{ fontSize: 18, fontWeight: 800, margin: 0, color: "#0f172a" }}>
                 {mode === "CREATE" ? "Registrar Nuevo Club" : `Editando: ${fullName}`}
               </h2>
-              <div style={{ fontSize: 13, color: theme.textMuted, marginTop: 2 }}>
+              <div style={{ fontSize: 13, color: "#64748b", marginTop: 2 }}>
                 Identificador: <code style={{ color: "#2563eb", fontWeight: 600 }}>{finalSlug || "auto-slug"}</code>
               </div>
             </div>
@@ -1184,9 +1182,9 @@ export default function ClubManagerPage() {
                 borderRadius: 8,
                 borderWidth: 1,
                 borderStyle: "solid",
-                borderColor: theme.borderCol,
-                backgroundColor: theme.bgInput,
-                color: theme.textPrimary,
+                borderColor: "#cbd5e1",
+                backgroundColor: "#ffffff",
+                color: "#475569",
                 fontWeight: 600,
                 fontSize: 13,
                 cursor: "pointer",
@@ -1223,7 +1221,7 @@ export default function ClubManagerPage() {
               marginBottom: "1.25rem",
               borderBottomWidth: 1,
               borderBottomStyle: "solid",
-              borderBottomColor: theme.borderCol,
+              borderBottomColor: "#e2e8f0",
               paddingBottom: 8,
               flexWrap: "wrap",
             }}
@@ -1238,8 +1236,8 @@ export default function ClubManagerPage() {
                 padding: "8px 14px",
                 borderRadius: 8,
                 border: "none",
-                backgroundColor: activeFormTab === "LOCATION" ? (theme.darkMode ? "#1e3a8a" : "#eff6ff") : "transparent",
-                color: activeFormTab === "LOCATION" ? "#2563eb" : theme.textMuted,
+                backgroundColor: activeFormTab === "LOCATION" ? "#eff6ff" : "transparent",
+                color: activeFormTab === "LOCATION" ? "#2563eb" : "#64748b",
                 fontSize: 13,
                 fontWeight: 600,
                 cursor: "pointer",
@@ -1258,8 +1256,8 @@ export default function ClubManagerPage() {
                 padding: "8px 14px",
                 borderRadius: 8,
                 border: "none",
-                backgroundColor: activeFormTab === "IDENTITY" ? (theme.darkMode ? "#1e3a8a" : "#eff6ff") : "transparent",
-                color: activeFormTab === "IDENTITY" ? "#2563eb" : theme.textMuted,
+                backgroundColor: activeFormTab === "IDENTITY" ? "#eff6ff" : "transparent",
+                color: activeFormTab === "IDENTITY" ? "#2563eb" : "#64748b",
                 fontSize: 13,
                 fontWeight: 600,
                 cursor: "pointer",
@@ -1278,8 +1276,8 @@ export default function ClubManagerPage() {
                 padding: "8px 14px",
                 borderRadius: 8,
                 border: "none",
-                backgroundColor: activeFormTab === "STADIUM" ? (theme.darkMode ? "#1e3a8a" : "#eff6ff") : "transparent",
-                color: activeFormTab === "STADIUM" ? "#2563eb" : theme.textMuted,
+                backgroundColor: activeFormTab === "STADIUM" ? "#eff6ff" : "transparent",
+                color: activeFormTab === "STADIUM" ? "#2563eb" : "#64748b",
                 fontSize: 13,
                 fontWeight: 600,
                 cursor: "pointer",
@@ -1298,8 +1296,8 @@ export default function ClubManagerPage() {
                 padding: "8px 14px",
                 borderRadius: 8,
                 border: "none",
-                backgroundColor: activeFormTab === "TITLES" ? (theme.darkMode ? "#1e3a8a" : "#eff6ff") : "transparent",
-                color: activeFormTab === "TITLES" ? "#2563eb" : theme.textMuted,
+                backgroundColor: activeFormTab === "TITLES" ? "#eff6ff" : "transparent",
+                color: activeFormTab === "TITLES" ? "#2563eb" : "#64748b",
                 fontSize: 13,
                 fontWeight: 600,
                 cursor: "pointer",
@@ -1312,7 +1310,7 @@ export default function ClubManagerPage() {
           {/* Contenido Pestaña 1: Ubicación & Afiliación */}
           {activeFormTab === "LOCATION" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
                 Ubicación Geográfica & Liga de Origen
               </h3>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
@@ -1337,8 +1335,8 @@ export default function ClubManagerPage() {
                 />
               </div>
 
-              <div style={{ marginTop: 16, backgroundColor: theme.darkMode ? "#0f172a" : "#f8fafc", padding: 14, borderRadius: 10, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol }}>
-                <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", color: theme.textPrimary }}>
+              <div style={{ marginTop: 16, backgroundColor: "#f8fafc", padding: 14, borderRadius: 10, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 14, fontWeight: 600, cursor: "pointer", color: "#0f172a" }}>
                   <input
                     type="checkbox"
                     checked={isDirectAfa}
@@ -1377,14 +1375,14 @@ export default function ClubManagerPage() {
           {/* Contenido Pestaña 2: Identidad & Escudo */}
           {activeFormTab === "IDENTITY" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
                 Nombres & Escudo Oficial
               </h3>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Nombre Corto *</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Nombre Corto *</label>
                   <input
-                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }}
+                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
                     placeholder="Ej: Colón, River, Boca"
                     value={name}
                     onChange={(e) => setName(e.target.value)}
@@ -1392,9 +1390,9 @@ export default function ClubManagerPage() {
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Nombre Completo u Oficial</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Nombre Completo u Oficial</label>
                   <input
-                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }}
+                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
                     placeholder="Ej: Club Atlético Colón"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
@@ -1402,9 +1400,9 @@ export default function ClubManagerPage() {
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Apodo o Sobrenombre</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Apodo o Sobrenombre</label>
                   <input
-                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }}
+                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
                     placeholder="Ej: Sabalero, Millonario, Xeneize"
                     value={nickname}
                     onChange={(e) => setNickname(e.target.value)}
@@ -1412,9 +1410,9 @@ export default function ClubManagerPage() {
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Identificador Slug (Opcional para forzar)</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Identificador Slug (Opcional para forzar)</label>
                   <input
-                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }}
+                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
                     placeholder={autoSlug}
                     value={manualSlug}
                     onChange={(e) => setManualSlug(e.target.value)}
@@ -1422,20 +1420,42 @@ export default function ClubManagerPage() {
                 </div>
               </div>
 
-              {/* Selección de Escudo con botón destacado para examinar de la PC */}
+              {/* Selección de Escudo con botón destacado para examinar de la PC y previsualización en tiempo real */}
               <div style={{ marginTop: 20 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                   Escudo Institucional
                 </label>
                 <div style={{ display: "flex", alignItems: "center", gap: 20, marginTop: 10 }}>
-                  <img
-                    src={badgeData || badgeUrl || `/badges/${finalSlug || "default"}.webp`}
-                    alt=""
-                    style={{ width: 64, height: 64, objectFit: "contain", flexShrink: 0 }}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.visibility = "hidden";
+                  <div
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: 10,
+                      backgroundColor: "#f8fafc",
+                      borderWidth: 1,
+                      borderStyle: "solid",
+                      borderColor: "#cbd5e1",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      overflow: "hidden",
+                      flexShrink: 0,
                     }}
-                  />
+                  >
+                    {badgeData || badgeUrl ? (
+                      <img
+                        key={badgeData || badgeUrl}
+                        src={badgeData || badgeUrl}
+                        alt="Previsualización escudo"
+                        style={{ width: 56, height: 56, objectFit: "contain" }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.visibility = "hidden";
+                        }}
+                      />
+                    ) : (
+                      <Shield size={28} style={{ color: "#94a3b8" }} />
+                    )}
+                  </div>
 
                   <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
                     <input
@@ -1466,7 +1486,7 @@ export default function ClubManagerPage() {
                       <Upload size={16} />
                       <span>Seleccionar archivo desde tu PC</span>
                     </button>
-                    <div style={{ fontSize: 12, color: theme.textMuted }}>
+                    <div style={{ fontSize: 12, color: "#64748b" }}>
                       Subí una imagen PNG, JPG o WEBP. El sistema la procesará y optimizará automáticamente.
                     </div>
                   </div>
@@ -1477,7 +1497,7 @@ export default function ClubManagerPage() {
                 <button
                   type="button"
                   onClick={() => setActiveFormTab("LOCATION")}
-                  style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: theme.bgInput, color: theme.textPrimary, fontWeight: 600, fontSize: 13, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, cursor: "pointer" }}
+                  style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: "#ffffff", color: "#334155", fontWeight: 600, fontSize: 13, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", cursor: "pointer" }}
                 >
                   ← Anterior
                 </button>
@@ -1495,14 +1515,14 @@ export default function ClubManagerPage() {
           {/* Contenido Pestaña 3: Estadio & Torneos */}
           {activeFormTab === "STADIUM" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
                 Datos Institucionales, Cancha & Torneos Activos
               </h3>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Nombre del Estadio / Cancha</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Nombre del Estadio / Cancha</label>
                   <input
-                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }}
+                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
                     placeholder="Ej: Estadio Brigadier General Estanislao López"
                     value={stadiumName}
                     onChange={(e) => setStadiumName(e.target.value)}
@@ -1510,9 +1530,9 @@ export default function ClubManagerPage() {
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Capacidad de Espectadores</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Capacidad de Espectadores</label>
                   <input
-                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }}
+                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
                     type="number"
                     placeholder="Ej: 40000"
                     value={stadiumCapacity}
@@ -1521,9 +1541,9 @@ export default function ClubManagerPage() {
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Fecha / Año de Fundación</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Fecha / Año de Fundación</label>
                   <input
-                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }}
+                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
                     placeholder="Ej: 5 de mayo de 1905"
                     value={foundation}
                     onChange={(e) => setFoundation(e.target.value)}
@@ -1531,16 +1551,16 @@ export default function ClubManagerPage() {
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Coordenadas Mapa (Latitud / Longitud) *</label>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Coordenadas Mapa (Latitud / Longitud) *</label>
                   <div style={{ display: "flex", gap: 8 }}>
                     <input
-                      style={{ flex: 1, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }}
+                      style={{ flex: 1, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
                       placeholder="Latitud (ej: -31.65)"
                       value={lat}
                       onChange={(e) => setLat(e.target.value)}
                     />
                     <input
-                      style={{ flex: 1, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }}
+                      style={{ flex: 1, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
                       placeholder="Longitud (ej: -60.71)"
                       value={lng}
                       onChange={(e) => setLng(e.target.value)}
@@ -1551,7 +1571,7 @@ export default function ClubManagerPage() {
 
               {/* Categorías y Torneos Activos */}
               <div style={{ marginTop: 20 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Torneos y Competencias Nacionales Activas</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Torneos y Competencias Nacionales Activas</label>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))", gap: 8, marginTop: 8 }}>
                   {competitions
                     .filter((c) => c.type !== "ORGANIZATION" && c.level !== null)
@@ -1566,8 +1586,8 @@ export default function ClubManagerPage() {
                           borderRadius: 8,
                           borderWidth: 1,
                           borderStyle: "solid",
-                          borderColor: theme.borderCol,
-                          backgroundColor: selectedComps.includes(c.id) ? (theme.darkMode ? "#1e3a8a" : "#eff6ff") : theme.bgInput,
+                          borderColor: "#e2e8f0",
+                          backgroundColor: selectedComps.includes(c.id) ? "#eff6ff" : "#ffffff",
                           cursor: "pointer",
                           fontSize: 13,
                         }}
@@ -1583,8 +1603,8 @@ export default function ClubManagerPage() {
                           style={{ width: 16, height: 16 }}
                         />
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 600, color: theme.textPrimary }}>{c.name}</div>
-                          <div style={{ fontSize: 11, color: theme.textMuted }}>Nivel {c.level ?? "-"}</div>
+                          <div style={{ fontWeight: 600, color: "#0f172a" }}>{c.name}</div>
+                          <div style={{ fontSize: 11, color: "#64748b" }}>Nivel {c.level ?? "-"}</div>
                         </div>
                       </label>
                     ))}
@@ -1595,7 +1615,7 @@ export default function ClubManagerPage() {
                 <button
                   type="button"
                   onClick={() => setActiveFormTab("IDENTITY")}
-                  style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: theme.bgInput, color: theme.textPrimary, fontWeight: 600, fontSize: 13, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, cursor: "pointer" }}
+                  style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: "#ffffff", color: "#334155", fontWeight: 600, fontSize: 13, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", cursor: "pointer" }}
                 >
                   ← Anterior
                 </button>
@@ -1613,12 +1633,12 @@ export default function ClubManagerPage() {
           {/* Contenido Pestaña 4: Palmarés & Historia */}
           {activeFormTab === "TITLES" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-              <h3 style={{ fontSize: 13, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
+              <h3 style={{ fontSize: 13, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
                 Palmarés Conseguido & Historia Institucional
               </h3>
 
               <div style={{ marginBottom: 20 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Títulos y Campeonatos Conseguidos</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Títulos y Campeonatos Conseguidos</label>
                 {titles.length > 0 && (
                   <div style={{ display: "flex", flexDirection: "column", gap: 6, margin: "8px 0 12px 0" }}>
                     {titles.map((t, i) => (
@@ -1629,15 +1649,15 @@ export default function ClubManagerPage() {
                           alignItems: "center",
                           justifyContent: "space-between",
                           padding: "8px 12px",
-                          backgroundColor: theme.bgInput,
+                          backgroundColor: "#f8fafc",
                           borderRadius: 8,
                           borderWidth: 1,
                           borderStyle: "solid",
-                          borderColor: theme.borderCol,
+                          borderColor: "#e2e8f0",
                           fontSize: 13,
                         }}
                       >
-                        <span style={{ fontWeight: 600, color: theme.textPrimary }}>
+                        <span style={{ fontWeight: 600, color: "#0f172a" }}>
                           🏆 {t.name} <strong style={{ color: "#2563eb", marginLeft: 6 }}>({t.count})</strong>
                         </span>
                         <button
@@ -1654,21 +1674,21 @@ export default function ClubManagerPage() {
 
                 <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
                   <select
-                    style={{ flex: 2, minWidth: 200, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }}
+                    style={{ flex: 2, minWidth: 200, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
                     value={newTitleName}
                     onChange={(e) => setNewTitleName(e.target.value)}
                   >
-                    <option value="" style={{ backgroundColor: theme.bgCard }}>Seleccionar Torneo / Competencia Registrada</option>
+                    <option value="">Seleccionar Torneo / Competencia Registrada</option>
                     <optgroup label="Torneos Nacionales e Internacionales">
                       {competitions.map((c) => (
-                        <option key={c.id} value={c.name} style={{ backgroundColor: theme.bgCard }}>
+                        <option key={c.id} value={c.name}>
                           {c.name} (Nivel {c.level ?? "-"})
                         </option>
                       ))}
                     </optgroup>
                     <optgroup label="Ligas Regionales">
                       {leagues.map((l) => (
-                        <option key={l.id} value={l.name} style={{ backgroundColor: theme.bgCard }}>
+                        <option key={l.id} value={l.name}>
                           {l.name}
                         </option>
                       ))}
@@ -1676,7 +1696,7 @@ export default function ClubManagerPage() {
                   </select>
 
                   <input
-                    style={{ width: 100, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }}
+                    style={{ width: 100, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
                     type="number"
                     min="1"
                     placeholder="Cantidad"
@@ -1687,7 +1707,7 @@ export default function ClubManagerPage() {
                   <button
                     type="button"
                     onClick={handleAddTitle}
-                    style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: theme.bgInput, color: theme.textPrimary, fontWeight: 600, fontSize: 13, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, cursor: "pointer" }}
+                    style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: "#ffffff", color: "#334155", fontWeight: 600, fontSize: 13, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", cursor: "pointer" }}
                   >
                     + Añadir Título
                   </button>
@@ -1695,9 +1715,9 @@ export default function ClubManagerPage() {
               </div>
 
               <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Reseña Histórica del Club</label>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Reseña Histórica del Club</label>
                 <textarea
-                  style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none", minHeight: 120, resize: "vertical" }}
+                  style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none", minHeight: 120, resize: "vertical" }}
                   placeholder="Reseña del origen, logros e hitos del club..."
                   value={history}
                   onChange={(e) => setHistory(e.target.value)}
@@ -1708,7 +1728,7 @@ export default function ClubManagerPage() {
                 <button
                   type="button"
                   onClick={() => setActiveFormTab("STADIUM")}
-                  style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: theme.bgInput, color: theme.textPrimary, fontWeight: 600, fontSize: 13, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, cursor: "pointer" }}
+                  style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: "#ffffff", color: "#334155", fontWeight: 600, fontSize: 13, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", cursor: "pointer" }}
                 >
                   ← Anterior
                 </button>

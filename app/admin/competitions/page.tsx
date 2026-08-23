@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { AdminLayout, useAdminTheme } from "@/components/admin/AdminLayout";
+import { AdminLayout } from "@/components/admin/AdminLayout";
 import {
   getCompetitions,
   upsertCompetition,
@@ -75,9 +75,41 @@ async function imageFileToWebp256(file: File): Promise<string> {
   });
 }
 
-export default function CompetitionsAdminPage() {
-  const theme = useAdminTheme();
+function getCompFormatLabel(type: string): string {
+  switch (type) {
+    case "ORGANIZATION":
+      return "Federación";
+    case "CUP":
+      return "Copa";
+    case "LEAGUE":
+      return "Liga";
+    case "TOURNAMENT":
+      return "Torneo";
+    default:
+      return "Competencia";
+  }
+}
 
+function getCompScopeLabel(c: CompetitionItem): string {
+  if (c.type === "ORGANIZATION") {
+    const nameNorm = normSearch(c.name);
+    if (
+      nameNorm.includes("conmebol") ||
+      nameNorm.includes("fifa") ||
+      nameNorm.includes("sudameric") ||
+      nameNorm.includes("internacional")
+    ) {
+      return "Internacional";
+    }
+    return "Nacional";
+  }
+  if (c.level === 1) return "Internacional";
+  if (c.level === 2 || c.level === 3) return "Nacional";
+  if (c.level && c.level >= 4) return "Regional";
+  return "—";
+}
+
+export default function CompetitionsAdminPage() {
   const [activeTab, setActiveTab] = useState<"COMPETITIONS" | "REGIONAL_LEAGUES">("COMPETITIONS");
 
   const [competitions, setCompetitions] = useState<CompetitionItem[]>([]);
@@ -119,6 +151,7 @@ export default function CompetitionsAdminPage() {
   // Modal Palmarés / Campeones
   const [championsModalOpen, setChampionsModalOpen] = useState(false);
   const [championsTargetName, setChampionsTargetName] = useState("");
+  const [memberClubsForChampions, setMemberClubsForChampions] = useState<any[]>([]);
   const [championsList, setChampionsList] = useState<{
     titleId: string;
     clubId: string;
@@ -168,8 +201,11 @@ export default function CompetitionsAdminPage() {
   }, []);
 
   // Modal Campeones / Palmarés
-  const handleOpenChampionsModal = async (name: string) => {
-    setChampionsTargetName(name);
+  const handleOpenChampionsModal = async (
+    type: "COMPETITION" | "REGIONAL_LEAGUE",
+    item: { id: string; name: string }
+  ) => {
+    setChampionsTargetName(item.name);
     setChampSearchQuery("");
     setChampSearchResults([]);
     setSelectedClubForChamp(null);
@@ -177,8 +213,13 @@ export default function CompetitionsAdminPage() {
     setChampionsModalOpen(true);
     setChampionsLoading(true);
 
-    const champs = await getCompetitionChampions(name);
+    const [champs, memberClubs] = await Promise.all([
+      getCompetitionChampions(item.name),
+      type === "COMPETITION" ? getClubsByCompetitionId(item.id) : getClubsByLeagueId(item.id),
+    ]);
+
     setChampionsList(champs);
+    setMemberClubsForChampions(memberClubs || []);
     setChampionsLoading(false);
   };
 
@@ -198,10 +239,25 @@ export default function CompetitionsAdminPage() {
     }
     const delay = setTimeout(async () => {
       const results = await searchClubsForSelection(champSearchQuery);
-      setChampSearchResults(results);
+      const memberIds = new Set(memberClubsForChampions.map((m) => m.id));
+      const sorted = [...results].sort((a, b) => {
+        const aMember = Boolean(a?.id && memberIds.has(a.id));
+        const bMember = Boolean(b?.id && memberIds.has(b.id));
+        if (aMember && !bMember) return -1;
+        if (!aMember && bMember) return 1;
+        return 0;
+      });
+      setChampSearchResults(sorted);
     }, 300);
     return () => clearTimeout(delay);
-  }, [champSearchQuery]);
+  }, [champSearchQuery, memberClubsForChampions]);
+
+  const handleSelectClubForChamp = (club: any) => {
+    setSelectedClubForChamp(club);
+    setChampSearchQuery("");
+    setChampSearchResults([]);
+    setChampTitleCount(1);
+  };
 
   const handleSaveChampionTitle = async () => {
     if (!selectedClubForChamp || !championsTargetName) {
@@ -220,6 +276,7 @@ export default function CompetitionsAdminPage() {
     else {
       setSelectedClubForChamp(null);
       setChampSearchQuery("");
+      setChampTitleCount(1);
       await handleReloadChampionsList();
     }
   };
@@ -540,7 +597,7 @@ export default function CompetitionsAdminPage() {
       onPrimaryAction={handleCreateNewClick}
       primaryActionLabel={activeTab === "COMPETITIONS" ? "Nueva Competencia" : "Nueva Liga Regional"}
     >
-      {/* Navegación de Pestañas - Estilos explícitos para evitar conflictos shorthand/longhand */}
+      {/* Navegación de Pestañas */}
       <div
         style={{
           display: "flex",
@@ -548,7 +605,7 @@ export default function CompetitionsAdminPage() {
           marginBottom: "1.25rem",
           borderBottomWidth: 1,
           borderBottomStyle: "solid",
-          borderBottomColor: theme.borderCol,
+          borderBottomColor: "#e2e8f0",
           paddingBottom: 8,
         }}
       >
@@ -567,11 +624,11 @@ export default function CompetitionsAdminPage() {
             borderRadius: 10,
             fontSize: 14,
             fontWeight: 600,
-            color: activeTab === "COMPETITIONS" ? theme.textPrimary : theme.textMuted,
-            backgroundColor: activeTab === "COMPETITIONS" ? theme.bgCard : theme.bgInput,
+            color: activeTab === "COMPETITIONS" ? "#0f172a" : "#64748b",
+            backgroundColor: activeTab === "COMPETITIONS" ? "#ffffff" : "#f1f5f9",
             borderWidth: 1,
             borderStyle: "solid",
-            borderColor: activeTab === "COMPETITIONS" ? "#2563eb" : theme.borderCol,
+            borderColor: activeTab === "COMPETITIONS" ? "#0f172a" : "#cbd5e1",
             cursor: "pointer",
             transition: "all 0.15s ease",
           }}
@@ -594,11 +651,11 @@ export default function CompetitionsAdminPage() {
             borderRadius: 10,
             fontSize: 14,
             fontWeight: 600,
-            color: activeTab === "REGIONAL_LEAGUES" ? theme.textPrimary : theme.textMuted,
-            backgroundColor: activeTab === "REGIONAL_LEAGUES" ? theme.bgCard : theme.bgInput,
+            color: activeTab === "REGIONAL_LEAGUES" ? "#0f172a" : "#64748b",
+            backgroundColor: activeTab === "REGIONAL_LEAGUES" ? "#ffffff" : "#f1f5f9",
             borderWidth: 1,
             borderStyle: "solid",
-            borderColor: activeTab === "REGIONAL_LEAGUES" ? "#2563eb" : theme.borderCol,
+            borderColor: activeTab === "REGIONAL_LEAGUES" ? "#0f172a" : "#cbd5e1",
             cursor: "pointer",
             transition: "all 0.15s ease",
           }}
@@ -615,18 +672,18 @@ export default function CompetitionsAdminPage() {
               {/* Filtros Card */}
               <div
                 style={{
-                  backgroundColor: theme.bgCard,
+                  backgroundColor: "#ffffff",
                   borderRadius: 14,
                   borderWidth: 1,
                   borderStyle: "solid",
-                  borderColor: theme.borderCol,
+                  borderColor: "#e2e8f0",
                   padding: "1.25rem",
                   marginBottom: "1.25rem",
                 }}
               >
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 5, flex: 2, minWidth: 240 }}>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                       Buscar Competencia
                     </label>
                     <div
@@ -634,17 +691,17 @@ export default function CompetitionsAdminPage() {
                         display: "flex",
                         alignItems: "center",
                         gap: 8,
-                        backgroundColor: theme.bgInput,
+                        backgroundColor: "#ffffff",
                         borderWidth: 1,
                         borderStyle: "solid",
-                        borderColor: theme.borderCol,
+                        borderColor: "#cbd5e1",
                         borderRadius: 10,
                         padding: "8px 12px",
                       }}
                     >
-                      <Search size={16} style={{ color: theme.textMuted }} />
+                      <Search size={16} style={{ color: "#94a3b8" }} />
                       <input
-                        style={{ width: "100%", border: "none", outline: "none", fontSize: 14, color: theme.textPrimary, backgroundColor: "transparent" }}
+                        style={{ width: "100%", border: "none", outline: "none", fontSize: 14, color: "#0f172a", backgroundColor: "transparent" }}
                         placeholder="Buscar por nombre o slug..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -653,7 +710,7 @@ export default function CompetitionsAdminPage() {
                   </div>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: 5, flex: 1, minWidth: 160 }}>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                       Formato
                     </label>
                     <select
@@ -661,27 +718,27 @@ export default function CompetitionsAdminPage() {
                         width: "100%",
                         borderWidth: 1,
                         borderStyle: "solid",
-                        borderColor: theme.borderCol,
+                        borderColor: "#cbd5e1",
                         borderRadius: 10,
                         padding: "8px 12px",
                         fontSize: 14,
-                        color: theme.textPrimary,
-                        backgroundColor: theme.bgInput,
+                        color: "#0f172a",
+                        backgroundColor: "#ffffff",
                         outline: "none",
                       }}
                       value={selectedTypeFilter}
                       onChange={(e) => setSelectedTypeFilter(e.target.value)}
                     >
-                      <option value="" style={{ backgroundColor: theme.bgCard }}>Todos los formatos</option>
-                      <option value="LEAGUE" style={{ backgroundColor: theme.bgCard }}>Liga</option>
-                      <option value="CUP" style={{ backgroundColor: theme.bgCard }}>Copa</option>
-                      <option value="TOURNAMENT" style={{ backgroundColor: theme.bgCard }}>Torneo</option>
-                      <option value="ORGANIZATION" style={{ backgroundColor: theme.bgCard }}>Federación / Ente</option>
+                      <option value="">Todos los formatos</option>
+                      <option value="LEAGUE">Liga</option>
+                      <option value="CUP">Copa</option>
+                      <option value="TOURNAMENT">Torneo</option>
+                      <option value="ORGANIZATION">Federación / Ente</option>
                     </select>
                   </div>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: 5, flex: 1, minWidth: 160 }}>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
                       Jerarquía / Nivel
                     </label>
                     <select
@@ -689,26 +746,26 @@ export default function CompetitionsAdminPage() {
                         width: "100%",
                         borderWidth: 1,
                         borderStyle: "solid",
-                        borderColor: theme.borderCol,
+                        borderColor: "#cbd5e1",
                         borderRadius: 10,
                         padding: "8px 12px",
                         fontSize: 14,
-                        color: theme.textPrimary,
-                        backgroundColor: theme.bgInput,
+                        color: "#0f172a",
+                        backgroundColor: "#ffffff",
                         outline: "none",
                       }}
                       value={selectedLevelFilter}
                       onChange={(e) => setSelectedLevelFilter(e.target.value)}
                     >
-                      <option value="" style={{ backgroundColor: theme.bgCard }}>Todos los niveles</option>
-                      <option value="1" style={{ backgroundColor: theme.bgCard }}>Nivel 1 (Internacional)</option>
-                      <option value="2" style={{ backgroundColor: theme.bgCard }}>Nivel 2 (Primera Div - LPF)</option>
-                      <option value="3" style={{ backgroundColor: theme.bgCard }}>Nivel 3 (Primera Nacional)</option>
-                      <option value="4" style={{ backgroundColor: theme.bgCard }}>Nivel 4 (Federal A / B Metro)</option>
-                      <option value="5" style={{ backgroundColor: theme.bgCard }}>Nivel 5 (Regional Amateur)</option>
-                      <option value="6" style={{ backgroundColor: theme.bgCard }}>Nivel 6 (Promocional)</option>
-                      <option value="7" style={{ backgroundColor: theme.bgCard }}>Nivel 7 (Copas Prov)</option>
-                      <option value="8" style={{ backgroundColor: theme.bgCard }}>Nivel 8 (Ligas Regionales)</option>
+                      <option value="">Todos los niveles</option>
+                      <option value="1">Nivel 1 (Internacional)</option>
+                      <option value="2">Nivel 2 (Primera Div - LPF)</option>
+                      <option value="3">Nivel 3 (Primera Nacional)</option>
+                      <option value="4">Nivel 4 (Federal A / B Metro)</option>
+                      <option value="5">Nivel 5 (Regional Amateur)</option>
+                      <option value="6">Nivel 6 (Promocional)</option>
+                      <option value="7">Nivel 7 (Copas Prov)</option>
+                      <option value="8">Nivel 8 (Ligas Regionales)</option>
                     </select>
                   </div>
                 </div>
@@ -716,11 +773,11 @@ export default function CompetitionsAdminPage() {
 
               {/* Lista de Filas de Tarjeta */}
               {loading ? (
-                <div style={{ padding: "3rem", textAlign: "center", backgroundColor: theme.bgCard, borderRadius: 14, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, color: theme.textMuted }}>
+                <div style={{ padding: "3rem", textAlign: "center", backgroundColor: "#ffffff", borderRadius: 14, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0", color: "#64748b" }}>
                   Cargando competencias...
                 </div>
               ) : filteredCompetitions.length === 0 ? (
-                <div style={{ padding: "3rem", textAlign: "center", backgroundColor: theme.bgCard, borderRadius: 14, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, color: theme.textMuted }}>
+                <div style={{ padding: "3rem", textAlign: "center", backgroundColor: "#ffffff", borderRadius: 14, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0", color: "#64748b" }}>
                   No se encontraron competencias.
                 </div>
               ) : (
@@ -729,18 +786,18 @@ export default function CompetitionsAdminPage() {
                     <div
                       key={c.id}
                       style={{
-                        backgroundColor: theme.bgCard,
+                        backgroundColor: "#ffffff",
                         borderRadius: 14,
                         borderWidth: 1,
                         borderStyle: "solid",
-                        borderColor: theme.borderCol,
+                        borderColor: "#e2e8f0",
                         padding: "1rem 1.25rem",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "space-between",
                         gap: 16,
                         flexWrap: "wrap",
-                        boxShadow: theme.darkMode ? "0 2px 5px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.03)",
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 260, flex: 2 }}>
@@ -752,17 +809,17 @@ export default function CompetitionsAdminPage() {
                         )}
 
                         <div>
-                          <div style={{ fontWeight: 700, fontSize: 16, color: theme.textPrimary, lineHeight: 1.25 }}>
+                          <div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", lineHeight: 1.25 }}>
                             {c.name}
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
                             {c.level && (
-                              <span style={{ fontSize: 11, fontWeight: 700, color: "#1e40af", backgroundColor: theme.darkMode ? "#1e3a8a" : "#eff6ff", borderRadius: 12, padding: "2px 8px" }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: "#1e40af", backgroundColor: "#eff6ff", borderRadius: 12, padding: "2px 8px" }}>
                                 Nivel {c.level}
                               </span>
                             )}
-                            <span style={{ fontSize: 11, fontWeight: 600, color: theme.textMuted, backgroundColor: theme.darkMode ? "#334155" : "#f1f5f9", borderRadius: 12, padding: "2px 8px" }}>
-                              {c.type === "ORGANIZATION" ? "Federación" : c.type === "CUP" ? "Copa Nacional" : "Liga"}
+                            <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", backgroundColor: "#f1f5f9", borderRadius: 12, padding: "2px 8px" }}>
+                              {getCompFormatLabel(c.type)}
                             </span>
                           </div>
                         </div>
@@ -771,26 +828,26 @@ export default function CompetitionsAdminPage() {
                       {/* Columnas Metadatos (Alcance, Fundación, Clubes) */}
                       <div style={{ display: "flex", alignItems: "center", gap: 24, flex: 1, justifyContent: "space-around", minWidth: 260 }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Alcance</span>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: theme.textPrimary, display: "flex", alignItems: "center", gap: 5 }}>
-                            <Globe size={13} style={{ color: theme.textMuted }} />
-                            {c.level && c.level <= 3 ? "Nacional" : "Regional"}
+                          <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>Alcance</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#334155", display: "flex", alignItems: "center", gap: 5 }}>
+                            <Globe size={13} style={{ color: "#64748b" }} />
+                            {getCompScopeLabel(c)}
                           </span>
                         </div>
 
                         <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Fundación</span>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: theme.textPrimary, display: "flex", alignItems: "center", gap: 5 }}>
-                            <Calendar size={13} style={{ color: theme.textMuted }} />
+                          <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>Fundación</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#334155", display: "flex", alignItems: "center", gap: 5 }}>
+                            <Calendar size={13} style={{ color: "#64748b" }} />
                             {c.foundation || "—"}
                           </span>
                         </div>
 
                         <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Clubes</span>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: theme.textPrimary, display: "flex", alignItems: "center", gap: 5 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>Clubes</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#334155", display: "flex", alignItems: "center", gap: 5 }}>
                             <Users size={13} style={{ color: "#2563eb" }} />
-                            <strong style={{ color: theme.textPrimary }}>{c._count?.clubs ?? 0}</strong>
+                            <strong style={{ color: "#0f172a" }}>{c._count?.clubs ?? 0}</strong>
                           </span>
                         </div>
                       </div>
@@ -800,7 +857,7 @@ export default function CompetitionsAdminPage() {
                         <button
                           type="button"
                           onClick={() => handleOpenTeamsModal("COMPETITION", c)}
-                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0", backgroundColor: "#ffffff", color: "#475569", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
                           title="Gestionar equipos participantes"
                         >
                           <Users size={17} />
@@ -808,8 +865,8 @@ export default function CompetitionsAdminPage() {
 
                         <button
                           type="button"
-                          onClick={() => handleOpenChampionsModal(c.name)}
-                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          onClick={() => handleOpenChampionsModal("COMPETITION", c)}
+                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0", backgroundColor: "#ffffff", color: "#475569", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
                           title="Gestionar palmarés y campeones históricos"
                         >
                           <Award size={17} />
@@ -818,7 +875,7 @@ export default function CompetitionsAdminPage() {
                         <button
                           type="button"
                           onClick={() => handleEditComp(c)}
-                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0", backgroundColor: "#ffffff", color: "#475569", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
                           title="Editar competencia"
                         >
                           <Edit3 size={17} />
@@ -827,7 +884,7 @@ export default function CompetitionsAdminPage() {
                         <button
                           type="button"
                           onClick={() => handleDeleteComp(c.id, c.name)}
-                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: "#dc2626", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0", backgroundColor: "#ffffff", color: "#dc2626", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
                           title="Eliminar competencia"
                         >
                           <Trash2 size={17} />
@@ -845,67 +902,102 @@ export default function CompetitionsAdminPage() {
             <form
               onSubmit={handleSubmitComp}
               style={{
-                backgroundColor: theme.bgCard,
+                backgroundColor: "#ffffff",
                 borderRadius: 16,
                 borderWidth: 1,
                 borderStyle: "solid",
-                borderColor: theme.borderCol,
+                borderColor: "#e2e8f0",
                 padding: "1.5rem",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem", paddingBottom: "1rem", borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: theme.borderCol }}>
-                <h3 style={{ fontSize: 17, fontWeight: 800, color: theme.textPrimary, margin: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem", paddingBottom: "1rem", borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: "#e2e8f0" }}>
+                <h3 style={{ fontSize: 17, fontWeight: 800, color: "#0f172a", margin: 0 }}>
                   {compMode === "CREATE" ? "Crear Nueva Competencia" : `Editando: ${compName}`}
                 </h3>
-                <button type="button" onClick={() => setCompMode("IDLE")} style={{ padding: "8px 14px", borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                <button type="button" onClick={() => setCompMode("IDLE")} style={{ padding: "8px 14px", borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", backgroundColor: "#ffffff", color: "#475569", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
                   Cancelar
                 </button>
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Nombre de la Competencia / Ente *</label>
-                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} placeholder="Ej: Liga Profesional de Fútbol, Copa Argentina" value={compName} onChange={(e) => setCompName(e.target.value)} />
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Nombre de la Competencia / Ente *</label>
+                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }} placeholder="Ej: Liga Profesional de Fútbol, Copa Argentina" value={compName} onChange={(e) => setCompName(e.target.value)} />
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Slug (Auto-generado)</label>
-                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} placeholder={compAutoSlug} value={compManualSlug} onChange={(e) => setCompManualSlug(e.target.value)} />
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Slug (Auto-generado)</label>
+                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }} placeholder={compAutoSlug} value={compManualSlug} onChange={(e) => setCompManualSlug(e.target.value)} />
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Formato / Organización</label>
-                  <select style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} value={compType} onChange={(e) => setCompType(e.target.value as CompetitionType)}>
-                    <option value="LEAGUE" style={{ backgroundColor: theme.bgCard }}>LIGA (Liga / Torneo largo o de puntos)</option>
-                    <option value="CUP" style={{ backgroundColor: theme.bgCard }}>COPA (Copa de eliminación directa)</option>
-                    <option value="TOURNAMENT" style={{ backgroundColor: theme.bgCard }}>TORNEO (Torneo zonal / regional)</option>
-                    <option value="ORGANIZATION" style={{ backgroundColor: theme.bgCard }}>FEDERACIÓN / ENTE (Ej: AFA, Conmebol)</option>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Formato / Organización</label>
+                  <select style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }} value={compType} onChange={(e) => setCompType(e.target.value as CompetitionType)}>
+                    <option value="LEAGUE">LIGA (Liga / Torneo largo o de puntos)</option>
+                    <option value="CUP">COPA (Copa de eliminación directa)</option>
+                    <option value="TOURNAMENT">TORNEO (Torneo zonal / regional)</option>
+                    <option value="ORGANIZATION">FEDERACIÓN / ENTE (Ej: AFA, Conmebol)</option>
                   </select>
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Nivel de Jerarquía Oficial</label>
-                  <select style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} value={compLevel} onChange={(e) => setCompLevel(e.target.value)}>
-                    <option value="" style={{ backgroundColor: theme.bgCard }}>Sin nivel (Ideal para Federaciones)</option>
-                    <option value="1" style={{ backgroundColor: theme.bgCard }}>1 - Internacional (Copa Libertadores)</option>
-                    <option value="2" style={{ backgroundColor: theme.bgCard }}>2 - Primera División (Liga Profesional AFA)</option>
-                    <option value="3" style={{ backgroundColor: theme.bgCard }}>3 - Segunda División (Primera Nacional)</option>
-                    <option value="4" style={{ backgroundColor: theme.bgCard }}>4 - Tercera División (Federal A / B Metro)</option>
-                    <option value="5" style={{ backgroundColor: theme.bgCard }}>5 - Cuarta División (Regional Amateur)</option>
-                    <option value="6" style={{ backgroundColor: theme.bgCard }}>6 - Quinta División (Promocional)</option>
-                    <option value="7" style={{ backgroundColor: theme.bgCard }}>7 - Copas Provinciales</option>
-                    <option value="8" style={{ backgroundColor: theme.bgCard }}>8 - Ligas Regionales y Locales</option>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Nivel de Jerarquía Oficial</label>
+                  <select style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }} value={compLevel} onChange={(e) => setCompLevel(e.target.value)}>
+                    <option value="">Sin nivel (Ideal para Federaciones)</option>
+                    <option value="1">1 - Internacional (Copa Libertadores)</option>
+                    <option value="2">2 - Primera División (Liga Profesional AFA)</option>
+                    <option value="3">3 - Segunda División (Primera Nacional)</option>
+                    <option value="4">4 - Tercera División (Federal A / B Metro)</option>
+                    <option value="5">5 - Cuarta División (Regional Amateur)</option>
+                    <option value="6">6 - Quinta División (Promocional)</option>
+                    <option value="7">7 - Copas Provinciales</option>
+                    <option value="8">8 - Ligas Regionales y Locales</option>
                   </select>
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Año de Fundación</label>
-                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} placeholder="Ej: 1891" value={compFoundation} onChange={(e) => setCompFoundation(e.target.value)} />
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Año de Fundación</label>
+                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }} placeholder="Ej: 1891" value={compFoundation} onChange={(e) => setCompFoundation(e.target.value)} />
                 </div>
+              </div>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Logo o Trofeo Oficial</label>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {/* Selección de Logo con Previsualización y Formato Idéntico a Clubes */}
+              <div style={{ marginTop: 18, borderTopWidth: 1, borderTopStyle: "solid", borderTopColor: "#f1f5f9", paddingTop: 16 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Logo o Trofeo Oficial
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: 20, marginTop: 10 }}>
+                  <div
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: 10,
+                      backgroundColor: "#f8fafc",
+                      borderWidth: 1,
+                      borderStyle: "solid",
+                      borderColor: "#cbd5e1",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      overflow: "hidden",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {compLogoData || compLogoUrl ? (
+                      <img
+                        src={compLogoData || compLogoUrl}
+                        alt="Previsualización logo competencia"
+                        style={{ width: 56, height: 56, objectFit: "contain" }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.visibility = "hidden";
+                        }}
+                      />
+                    ) : (
+                      <Trophy size={28} style={{ color: "#94a3b8" }} />
+                    )}
+                  </div>
+
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
                     <input
                       type="file"
                       ref={compLogoFileRef}
@@ -916,18 +1008,33 @@ export default function CompetitionsAdminPage() {
                     <button
                       type="button"
                       onClick={() => compLogoFileRef.current?.click()}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, backgroundColor: "#2563eb", color: "#ffffff", fontWeight: 600, fontSize: 13, border: "none", cursor: "pointer" }}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "9px 16px",
+                        borderRadius: 8,
+                        backgroundColor: "#2563eb",
+                        color: "#ffffff",
+                        fontWeight: 600,
+                        fontSize: 13,
+                        border: "none",
+                        cursor: "pointer",
+                        width: "fit-content",
+                      }}
                     >
-                      <Upload size={15} />
-                      <span>Seleccionar logo de la PC</span>
+                      <Upload size={16} />
+                      <span>Seleccionar archivo desde tu PC</span>
                     </button>
-                    {compLogoUrl && <span style={{ fontSize: 12, color: theme.textMuted }}>✓ Imagen asignada</span>}
+                    <div style={{ fontSize: 12, color: "#64748b" }}>
+                      Subí una imagen PNG, JPG o WEBP. El sistema la procesará y optimizará automáticamente.
+                    </div>
                   </div>
                 </div>
               </div>
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
-                <button type="button" onClick={() => setCompMode("IDLE")} style={{ padding: "9px 18px", borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                <button type="button" onClick={() => setCompMode("IDLE")} style={{ padding: "9px 18px", borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", backgroundColor: "#ffffff", color: "#475569", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
                   Cancelar
                 </button>
                 <button type="submit" disabled={saving} style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: "#2563eb", color: "#ffffff", fontWeight: 700, fontSize: 13, border: "none", cursor: "pointer" }}>
@@ -946,34 +1053,34 @@ export default function CompetitionsAdminPage() {
             <div>
               <div
                 style={{
-                  backgroundColor: theme.bgCard,
+                  backgroundColor: "#ffffff",
                   borderRadius: 14,
                   borderWidth: 1,
                   borderStyle: "solid",
-                  borderColor: theme.borderCol,
+                  borderColor: "#e2e8f0",
                   padding: "1.25rem",
                   marginBottom: "1.25rem",
                 }}
               >
                 <div style={{ display: "flex", gap: 12, flexWrap: "wrap" }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 5, flex: 2, minWidth: 240 }}>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Buscar Liga Regional</label>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Buscar Liga Regional</label>
                     <div
                       style={{
                         display: "flex",
                         alignItems: "center",
                         gap: 8,
-                        backgroundColor: theme.bgInput,
+                        backgroundColor: "#ffffff",
                         borderWidth: 1,
                         borderStyle: "solid",
-                        borderColor: theme.borderCol,
+                        borderColor: "#cbd5e1",
                         borderRadius: 10,
                         padding: "8px 12px",
                       }}
                     >
-                      <Search size={16} style={{ color: theme.textMuted }} />
+                      <Search size={16} style={{ color: "#94a3b8" }} />
                       <input
-                        style={{ width: "100%", border: "none", outline: "none", fontSize: 14, color: theme.textPrimary, backgroundColor: "transparent" }}
+                        style={{ width: "100%", border: "none", outline: "none", fontSize: 14, color: "#0f172a", backgroundColor: "transparent" }}
                         placeholder="Buscar por nombre, slug o provincia..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
@@ -982,26 +1089,26 @@ export default function CompetitionsAdminPage() {
                   </div>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: 5, flex: 1, minWidth: 180 }}>
-                    <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Provincia</label>
+                    <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Provincia</label>
                     <select
                       style={{
                         width: "100%",
                         borderWidth: 1,
                         borderStyle: "solid",
-                        borderColor: theme.borderCol,
+                        borderColor: "#cbd5e1",
                         borderRadius: 10,
                         padding: "8px 12px",
                         fontSize: 14,
-                        color: theme.textPrimary,
-                        backgroundColor: theme.bgInput,
+                        color: "#0f172a",
+                        backgroundColor: "#ffffff",
                         outline: "none",
                       }}
                       value={selectedProvinceFilter}
                       onChange={(e) => setSelectedProvinceFilter(e.target.value)}
                     >
-                      <option value="" style={{ backgroundColor: theme.bgCard }}>Todas las provincias</option>
+                      <option value="">Todas las provincias</option>
                       {provinces.map((p) => (
-                        <option key={p.id} value={p.id} style={{ backgroundColor: theme.bgCard }}>
+                        <option key={p.id} value={p.id}>
                           {p.name}
                         </option>
                       ))}
@@ -1011,11 +1118,11 @@ export default function CompetitionsAdminPage() {
               </div>
 
               {loading ? (
-                <div style={{ padding: "3rem", textAlign: "center", backgroundColor: theme.bgCard, borderRadius: 14, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, color: theme.textMuted }}>
+                <div style={{ padding: "3rem", textAlign: "center", backgroundColor: "#ffffff", borderRadius: 14, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0", color: "#64748b" }}>
                   Cargando ligas regionales...
                 </div>
               ) : filteredLeagues.length === 0 ? (
-                <div style={{ padding: "3rem", textAlign: "center", backgroundColor: theme.bgCard, borderRadius: 14, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, color: theme.textMuted }}>
+                <div style={{ padding: "3rem", textAlign: "center", backgroundColor: "#ffffff", borderRadius: 14, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0", color: "#64748b" }}>
                   No se encontraron ligas regionales.
                 </div>
               ) : (
@@ -1024,18 +1131,18 @@ export default function CompetitionsAdminPage() {
                     <div
                       key={l.id}
                       style={{
-                        backgroundColor: theme.bgCard,
+                        backgroundColor: "#ffffff",
                         borderRadius: 14,
                         borderWidth: 1,
                         borderStyle: "solid",
-                        borderColor: theme.borderCol,
+                        borderColor: "#e2e8f0",
                         padding: "1rem 1.25rem",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "space-between",
                         gap: 16,
                         flexWrap: "wrap",
-                        boxShadow: theme.darkMode ? "0 2px 5px rgba(0,0,0,0.3)" : "0 1px 3px rgba(0,0,0,0.03)",
+                        boxShadow: "0 1px 3px rgba(0,0,0,0.03)",
                       }}
                     >
                       <div style={{ display: "flex", alignItems: "center", gap: 14, minWidth: 260, flex: 2 }}>
@@ -1047,14 +1154,14 @@ export default function CompetitionsAdminPage() {
                         )}
 
                         <div>
-                          <div style={{ fontWeight: 700, fontSize: 16, color: theme.textPrimary, lineHeight: 1.25 }}>
+                          <div style={{ fontWeight: 700, fontSize: 16, color: "#0f172a", lineHeight: 1.25 }}>
                             {l.name}
                           </div>
                           <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
-                            <span style={{ fontSize: 11, fontWeight: 700, color: "#166534", backgroundColor: theme.darkMode ? "#14532d" : "#dcfce7", borderRadius: 12, padding: "2px 8px" }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "#166534", backgroundColor: "#dcfce7", borderRadius: 12, padding: "2px 8px" }}>
                               {l.province?.name || "Provincia"}
                             </span>
-                            <span style={{ fontSize: 11, fontWeight: 600, color: theme.textMuted, backgroundColor: theme.darkMode ? "#334155" : "#f1f5f9", borderRadius: 12, padding: "2px 8px" }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: "#64748b", backgroundColor: "#f1f5f9", borderRadius: 12, padding: "2px 8px" }}>
                               Liga Regional
                             </span>
                           </div>
@@ -1063,20 +1170,20 @@ export default function CompetitionsAdminPage() {
 
                       <div style={{ display: "flex", alignItems: "center", gap: 24, flex: 1, justifyContent: "space-around", minWidth: 260 }}>
                         <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Organizador</span>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: theme.textPrimary }}>{l.organizer || "—"}</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>Organizador</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#334155" }}>{l.organizer || "—"}</span>
                         </div>
 
                         <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Fundación</span>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: theme.textPrimary }}>{l.foundation || "—"}</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>Fundación</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#334155" }}>{l.foundation || "—"}</span>
                         </div>
 
                         <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Clubes</span>
-                          <span style={{ fontSize: 13, fontWeight: 600, color: theme.textPrimary, display: "flex", alignItems: "center", gap: 5 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>Clubes</span>
+                          <span style={{ fontSize: 13, fontWeight: 600, color: "#334155", display: "flex", alignItems: "center", gap: 5 }}>
                             <Users size={13} style={{ color: "#2563eb" }} />
-                            <strong style={{ color: theme.textPrimary }}>{l._count?.clubs ?? 0}</strong>
+                            <strong style={{ color: "#0f172a" }}>{l._count?.clubs ?? 0}</strong>
                           </span>
                         </div>
                       </div>
@@ -1085,7 +1192,7 @@ export default function CompetitionsAdminPage() {
                         <button
                           type="button"
                           onClick={() => handleOpenTeamsModal("REGIONAL_LEAGUE", l)}
-                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0", backgroundColor: "#ffffff", color: "#475569", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
                           title="Gestionar clubes inscritos"
                         >
                           <Users size={17} />
@@ -1093,8 +1200,8 @@ export default function CompetitionsAdminPage() {
 
                         <button
                           type="button"
-                          onClick={() => handleOpenChampionsModal(l.name)}
-                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          onClick={() => handleOpenChampionsModal("REGIONAL_LEAGUE", l)}
+                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0", backgroundColor: "#ffffff", color: "#475569", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
                           title="Gestionar palmarés y campeones de la liga"
                         >
                           <Award size={17} />
@@ -1103,7 +1210,7 @@ export default function CompetitionsAdminPage() {
                         <button
                           type="button"
                           onClick={() => handleEditLeague(l)}
-                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0", backgroundColor: "#ffffff", color: "#475569", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
                           title="Editar liga regional"
                         >
                           <Edit3 size={17} />
@@ -1112,7 +1219,7 @@ export default function CompetitionsAdminPage() {
                         <button
                           type="button"
                           onClick={() => handleDeleteLeague(l.id, l.name)}
-                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: "#dc2626", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
+                          style={{ width: 36, height: 36, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0", backgroundColor: "#ffffff", color: "#dc2626", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer" }}
                           title="Eliminar liga"
                         >
                           <Trash2 size={17} />
@@ -1130,34 +1237,34 @@ export default function CompetitionsAdminPage() {
             <form
               onSubmit={handleSubmitLeague}
               style={{
-                backgroundColor: theme.bgCard,
+                backgroundColor: "#ffffff",
                 borderRadius: 16,
                 borderWidth: 1,
                 borderStyle: "solid",
-                borderColor: theme.borderCol,
+                borderColor: "#e2e8f0",
                 padding: "1.5rem",
               }}
             >
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem", paddingBottom: "1rem", borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: theme.borderCol }}>
-                <h3 style={{ fontSize: 17, fontWeight: 800, color: theme.textPrimary, margin: 0 }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1.25rem", paddingBottom: "1rem", borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: "#e2e8f0" }}>
+                <h3 style={{ fontSize: 17, fontWeight: 800, color: "#0f172a", margin: 0 }}>
                   {leagueMode === "CREATE" ? "Crear Nueva Liga Regional" : `Editando: ${leagueName}`}
                 </h3>
-                <button type="button" onClick={() => setLeagueMode("IDLE")} style={{ padding: "8px 14px", borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                <button type="button" onClick={() => setLeagueMode("IDLE")} style={{ padding: "8px 14px", borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", backgroundColor: "#ffffff", color: "#475569", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
                   Cancelar
                 </button>
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Nombre de la Liga Regional *</label>
-                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} placeholder="Ej: Liga Santafesina de Fútbol" value={leagueName} onChange={(e) => setLeagueName(e.target.value)} />
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Nombre de la Liga Regional *</label>
+                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }} placeholder="Ej: Liga Santafesina de Fútbol" value={leagueName} onChange={(e) => setLeagueName(e.target.value)} />
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Provincia *</label>
-                  <select style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} value={leagueProvinceId} onChange={(e) => setLeagueProvinceId(e.target.value)}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Provincia *</label>
+                  <select style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }} value={leagueProvinceId} onChange={(e) => setLeagueProvinceId(e.target.value)}>
                     {provinces.map((p) => (
-                      <option key={p.id} value={p.id} style={{ backgroundColor: theme.bgCard }}>
+                      <option key={p.id} value={p.id}>
                         {p.name}
                       </option>
                     ))}
@@ -1165,18 +1272,53 @@ export default function CompetitionsAdminPage() {
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Organizador / Ente Madre</label>
-                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} placeholder="Ej: Consejo Federal AFA" value={leagueOrganizer} onChange={(e) => setLeagueOrganizer(e.target.value)} />
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Organizador / Ente Madre</label>
+                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }} placeholder="Ej: Consejo Federal AFA" value={leagueOrganizer} onChange={(e) => setLeagueOrganizer(e.target.value)} />
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Fecha de Fundación</label>
-                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 8, padding: "9px 12px", fontSize: 14, color: theme.textPrimary, backgroundColor: theme.bgInput, outline: "none" }} placeholder="Ej: 1 de julio de 1931" value={leagueFoundation} onChange={(e) => setLeagueFoundation(e.target.value)} />
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Fecha de Fundación</label>
+                  <input style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }} placeholder="Ej: 1 de julio de 1931" value={leagueFoundation} onChange={(e) => setLeagueFoundation(e.target.value)} />
                 </div>
+              </div>
 
-                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em" }}>Logo Oficial de la Liga</label>
-                  <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              {/* Selección de Logo de Liga con Previsualización y Formato Idéntico a Clubes */}
+              <div style={{ marginTop: 18, borderTopWidth: 1, borderTopStyle: "solid", borderTopColor: "#f1f5f9", paddingTop: 16 }}>
+                <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  Logo Oficial de la Liga
+                </label>
+                <div style={{ display: "flex", alignItems: "center", gap: 20, marginTop: 10 }}>
+                  <div
+                    style={{
+                      width: 64,
+                      height: 64,
+                      borderRadius: 10,
+                      backgroundColor: "#f8fafc",
+                      borderWidth: 1,
+                      borderStyle: "solid",
+                      borderColor: "#cbd5e1",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      overflow: "hidden",
+                      flexShrink: 0,
+                    }}
+                  >
+                    {leagueLogoData || leagueLogoUrl ? (
+                      <img
+                        src={leagueLogoData || leagueLogoUrl}
+                        alt="Previsualización logo liga"
+                        style={{ width: 56, height: 56, objectFit: "contain" }}
+                        onError={(e) => {
+                          (e.target as HTMLImageElement).style.visibility = "hidden";
+                        }}
+                      />
+                    ) : (
+                      <Globe size={28} style={{ color: "#94a3b8" }} />
+                    )}
+                  </div>
+
+                  <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
                     <input
                       type="file"
                       ref={leagueLogoFileRef}
@@ -1187,18 +1329,33 @@ export default function CompetitionsAdminPage() {
                     <button
                       type="button"
                       onClick={() => leagueLogoFileRef.current?.click()}
-                      style={{ display: "inline-flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 8, backgroundColor: "#2563eb", color: "#ffffff", fontWeight: 600, fontSize: 13, border: "none", cursor: "pointer" }}
+                      style={{
+                        display: "inline-flex",
+                        alignItems: "center",
+                        gap: 8,
+                        padding: "9px 16px",
+                        borderRadius: 8,
+                        backgroundColor: "#2563eb",
+                        color: "#ffffff",
+                        fontWeight: 600,
+                        fontSize: 13,
+                        border: "none",
+                        cursor: "pointer",
+                        width: "fit-content",
+                      }}
                     >
-                      <Upload size={15} />
-                      <span>Seleccionar logo de la PC</span>
+                      <Upload size={16} />
+                      <span>Seleccionar archivo desde tu PC</span>
                     </button>
-                    {leagueLogoUrl && <span style={{ fontSize: 12, color: theme.textMuted }}>✓ Imagen asignada</span>}
+                    <div style={{ fontSize: 12, color: "#64748b" }}>
+                      Subí una imagen PNG, JPG o WEBP. El sistema la procesará y optimizará automáticamente.
+                    </div>
                   </div>
                 </div>
               </div>
 
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, marginTop: 20 }}>
-                <button type="button" onClick={() => setLeagueMode("IDLE")} style={{ padding: "9px 18px", borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
+                <button type="button" onClick={() => setLeagueMode("IDLE")} style={{ padding: "9px 18px", borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", backgroundColor: "#ffffff", color: "#475569", fontWeight: 600, fontSize: 13, cursor: "pointer" }}>
                   Cancelar
                 </button>
                 <button type="submit" disabled={saving} style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: "#2563eb", color: "#ffffff", fontWeight: 700, fontSize: 13, border: "none", cursor: "pointer" }}>
@@ -1212,49 +1369,49 @@ export default function CompetitionsAdminPage() {
 
       {/* Modal 1: Gestión de Equipos Participantes */}
       {teamsModalOpen && teamsTarget && (
-        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: "1rem" }}>
-          <div style={{ width: "100%", maxWidth: 640, backgroundColor: theme.bgCard, borderRadius: 16, padding: "1.5rem", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.3)", maxHeight: "90vh", overflowY: "auto", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1.25rem", paddingBottom: "0.75rem", borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: theme.borderCol }}>
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: "1rem" }}>
+          <div style={{ width: "100%", maxWidth: 640, backgroundColor: "#ffffff", borderRadius: 16, padding: "1.5rem", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)", maxHeight: "90vh", overflowY: "auto", borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1.25rem", paddingBottom: "0.75rem", borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: "#e2e8f0" }}>
               <div>
-                <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0, color: theme.textPrimary }}>
+                <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0, color: "#0f172a" }}>
                   Gestión de Equipos Participantes
                 </h3>
-                <div style={{ fontSize: 13, color: theme.textMuted, marginTop: 2 }}>
+                <div style={{ fontSize: 13, color: "#64748b", marginTop: 2 }}>
                   {teamsTarget.type === "COMPETITION" ? "Competencia" : "Liga Regional"}:{" "}
-                  <strong style={{ color: theme.textPrimary }}>{teamsTarget.item.name}</strong>{" "}
-                  <span style={{ fontSize: 11, fontWeight: 700, color: "#1e40af", backgroundColor: theme.darkMode ? "#1e3a8a" : "#eff6ff", borderRadius: 12, padding: "2px 8px" }}>
+                  <strong style={{ color: "#0f172a" }}>{teamsTarget.item.name}</strong>{" "}
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#1e40af", backgroundColor: "#eff6ff", borderRadius: 12, padding: "2px 8px" }}>
                     ({teamsList.length} equipos)
                   </span>
                 </div>
               </div>
-              <button type="button" onClick={() => setTeamsModalOpen(false)} style={{ border: "none", background: "transparent", color: theme.textMuted, cursor: "pointer", padding: 4, display: "flex" }}>
+              <button type="button" onClick={() => setTeamsModalOpen(false)} style={{ border: "none", background: "transparent", color: "#94a3b8", cursor: "pointer", padding: 4, display: "flex" }}>
                 <X size={18} />
               </button>
             </div>
 
             {/* Buscador para Añadir Clubes */}
-            <div style={{ backgroundColor: theme.bgInput, padding: 14, borderRadius: 10, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, marginBottom: 16 }}>
-              <label style={{ fontSize: 13, fontWeight: 700, color: theme.textPrimary, marginBottom: 6, display: "block" }}>
+            <div style={{ backgroundColor: "#f8fafc", padding: 14, borderRadius: 10, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0", marginBottom: 16 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 6, display: "block" }}>
                 Añadir Club a &quot;{teamsTarget.item.name}&quot;
               </label>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, backgroundColor: theme.bgCard, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 10, padding: "8px 12px" }}>
-                <Search size={16} style={{ color: theme.textMuted }} />
+              <div style={{ display: "flex", alignItems: "center", gap: 8, backgroundColor: "#ffffff", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 10, padding: "8px 12px" }}>
+                <Search size={16} style={{ color: "#94a3b8" }} />
                 <input
-                  style={{ width: "100%", border: "none", outline: "none", fontSize: 14, color: theme.textPrimary, backgroundColor: "transparent" }}
+                  style={{ width: "100%", border: "none", outline: "none", fontSize: 14, color: "#0f172a", backgroundColor: "transparent" }}
                   placeholder="Buscar club por nombre, apodo o ciudad para agregar..."
                   value={teamSearchQuery}
                   onChange={(e) => setTeamSearchQuery(e.target.value)}
                 />
               </div>
 
-              {teamSearchLoading && <div style={{ fontSize: 12, color: theme.textMuted, marginTop: 8 }}>Buscando candidatos...</div>}
+              {teamSearchLoading && <div style={{ fontSize: 12, color: "#64748b", marginTop: 8 }}>Buscando candidatos...</div>}
 
               {teamSearchResults.length > 0 && (
                 <div style={{ marginTop: 10, display: "flex", flexDirection: "column", gap: 6, maxHeight: 180, overflowY: "auto" }}>
                   {teamSearchResults.map((club) => {
                     const isAlreadyAdded = teamsList.some((t) => t.id === club.id);
                     return (
-                      <div key={club.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", backgroundColor: theme.bgCard, borderRadius: 6, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, fontSize: 13 }}>
+                      <div key={club.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", backgroundColor: "#ffffff", borderRadius: 6, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0", fontSize: 13 }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                           <img
                             src={club.crestUrl || `/badges/${club.slug}.webp`}
@@ -1265,15 +1422,15 @@ export default function CompetitionsAdminPage() {
                             }}
                           />
                           <div>
-                            <span style={{ fontWeight: 600, color: theme.textPrimary }}>{club.fullName}</span>
-                            <span style={{ fontSize: 11, color: theme.textMuted, marginLeft: 6 }}>
+                            <span style={{ fontWeight: 600, color: "#0f172a" }}>{club.fullName}</span>
+                            <span style={{ fontSize: 11, color: "#64748b", marginLeft: 6 }}>
                               ({club.locality?.name}, {club.locality?.province?.name})
                             </span>
                           </div>
                         </div>
 
                         {isAlreadyAdded ? (
-                          <span style={{ fontSize: 11, fontWeight: 600, color: "#166534", backgroundColor: theme.darkMode ? "#14532d" : "#dcfce7", padding: "2px 8px", borderRadius: 4 }}>
+                          <span style={{ fontSize: 11, fontWeight: 600, color: "#166534", backgroundColor: "#dcfce7", padding: "2px 8px", borderRadius: 4 }}>
                             ✓ Añadido
                           </span>
                         ) : (
@@ -1295,22 +1452,22 @@ export default function CompetitionsAdminPage() {
 
             {/* Lista de Equipos Actuales */}
             <div>
-              <h4 style={{ fontSize: 12, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+              <h4 style={{ fontSize: 12, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
                 Nómina de Equipos Inscritos ({teamsList.length})
               </h4>
 
               {teamsLoading ? (
-                <div style={{ padding: 20, textAlign: "center", color: theme.textMuted, fontSize: 13, backgroundColor: theme.bgInput, borderRadius: 8, borderWidth: 1, borderStyle: "dashed", borderColor: theme.borderCol }}>
+                <div style={{ padding: 20, textAlign: "center", color: "#64748b", fontSize: 13, backgroundColor: "#f8fafc", borderRadius: 8, borderWidth: 1, borderStyle: "dashed", borderColor: "#cbd5e1" }}>
                   Cargando equipos...
                 </div>
               ) : teamsList.length === 0 ? (
-                <div style={{ padding: 20, textAlign: "center", color: theme.textMuted, fontSize: 13, backgroundColor: theme.bgInput, borderRadius: 8, borderWidth: 1, borderStyle: "dashed", borderColor: theme.borderCol }}>
+                <div style={{ padding: 20, textAlign: "center", color: "#64748b", fontSize: 13, backgroundColor: "#f8fafc", borderRadius: 8, borderWidth: 1, borderStyle: "dashed", borderColor: "#cbd5e1" }}>
                   No hay equipos inscritos aún. Usá el buscador de arriba para añadir los primeros.
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 260, overflowY: "auto" }}>
                   {teamsList.map((club) => (
-                    <div key={club.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", backgroundColor: theme.bgCard, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, fontSize: 13 }}>
+                    <div key={club.id} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", backgroundColor: "#ffffff", borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0", fontSize: 13 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <img
                           src={club.crestUrl || `/badges/${club.slug}.webp`}
@@ -1321,8 +1478,8 @@ export default function CompetitionsAdminPage() {
                           }}
                         />
                         <div>
-                          <div style={{ fontWeight: 600, color: theme.textPrimary }}>{club.fullName}</div>
-                          <div style={{ fontSize: 11, color: theme.textMuted }}>
+                          <div style={{ fontWeight: 600, color: "#0f172a" }}>{club.fullName}</div>
+                          <div style={{ fontSize: 11, color: "#64748b" }}>
                             {club.locality?.name}, {club.locality?.province?.name}
                           </div>
                         </div>
@@ -1343,7 +1500,7 @@ export default function CompetitionsAdminPage() {
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
-              <button type="button" onClick={() => setTeamsModalOpen(false)} style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: theme.bgInput, color: theme.textPrimary, fontWeight: 600, fontSize: 13, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, cursor: "pointer" }}>
+              <button type="button" onClick={() => setTeamsModalOpen(false)} style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: "#f1f5f9", color: "#334155", fontWeight: 600, fontSize: 13, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", cursor: "pointer" }}>
                 Cerrar
               </button>
             </div>
@@ -1353,34 +1510,34 @@ export default function CompetitionsAdminPage() {
 
       {/* Modal 2: Palmarés / Historial de Campeones */}
       {championsModalOpen && (
-        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(15, 23, 42, 0.7)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: "1rem" }}>
-          <div style={{ width: "100%", maxWidth: 640, backgroundColor: theme.bgCard, borderRadius: 16, padding: "1.5rem", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.3)", maxHeight: "90vh", overflowY: "auto", borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol }}>
-            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1.25rem", paddingBottom: "0.75rem", borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: theme.borderCol }}>
+        <div style={{ position: "fixed", inset: 0, backgroundColor: "rgba(15, 23, 42, 0.6)", backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: "1rem" }}>
+          <div style={{ width: "100%", maxWidth: 640, backgroundColor: "#ffffff", borderRadius: 16, padding: "1.5rem", boxShadow: "0 20px 25px -5px rgba(0,0,0,0.1)", maxHeight: "90vh", overflowY: "auto", borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0" }}>
+            <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: "1.25rem", paddingBottom: "0.75rem", borderBottomWidth: 1, borderBottomStyle: "solid", borderBottomColor: "#e2e8f0" }}>
               <div>
-                <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0, color: theme.textPrimary }}>
+                <h3 style={{ fontSize: 17, fontWeight: 700, margin: 0, color: "#0f172a" }}>
                   Palmarés & Historial de Campeones
                 </h3>
-                <div style={{ fontSize: 13, color: theme.textMuted, marginTop: 2 }}>
-                  Torneo / Liga: <strong style={{ color: theme.textPrimary }}>{championsTargetName}</strong>
+                <div style={{ fontSize: 13, color: "#64748b", marginTop: 2 }}>
+                  Torneo / Liga: <strong style={{ color: "#0f172a" }}>{championsTargetName}</strong>
                 </div>
               </div>
-              <button type="button" onClick={() => setChampionsModalOpen(false)} style={{ border: "none", background: "transparent", color: theme.textMuted, cursor: "pointer", padding: 4, display: "flex" }}>
+              <button type="button" onClick={() => setChampionsModalOpen(false)} style={{ border: "none", background: "transparent", color: "#94a3b8", cursor: "pointer", padding: 4, display: "flex" }}>
                 <X size={18} />
               </button>
             </div>
 
             {/* Añadir Campeón */}
-            <div style={{ backgroundColor: theme.bgInput, padding: 14, borderRadius: 10, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, marginBottom: 16 }}>
-              <label style={{ fontSize: 13, fontWeight: 700, color: theme.textPrimary, marginBottom: 6, display: "block" }}>
+            <div style={{ backgroundColor: "#f8fafc", padding: 14, borderRadius: 10, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0", marginBottom: 16 }}>
+              <label style={{ fontSize: 13, fontWeight: 700, color: "#1e293b", marginBottom: 6, display: "block" }}>
                 Registrar Club Campeón en &quot;{championsTargetName}&quot;
               </label>
 
               {!selectedClubForChamp ? (
                 <div>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, backgroundColor: theme.bgCard, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, borderRadius: 10, padding: "8px 12px" }}>
-                    <Search size={16} style={{ color: theme.textMuted }} />
+                  <div style={{ display: "flex", alignItems: "center", gap: 8, backgroundColor: "#ffffff", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 10, padding: "8px 12px" }}>
+                    <Search size={16} style={{ color: "#94a3b8" }} />
                     <input
-                      style={{ width: "100%", border: "none", outline: "none", fontSize: 14, color: theme.textPrimary, backgroundColor: "transparent" }}
+                      style={{ width: "100%", border: "none", outline: "none", fontSize: 14, color: "#0f172a", backgroundColor: "transparent" }}
                       placeholder="Buscar club para asignar título..."
                       value={champSearchQuery}
                       onChange={(e) => setChampSearchQuery(e.target.value)}
@@ -1388,49 +1545,146 @@ export default function CompetitionsAdminPage() {
                   </div>
 
                   {champSearchResults.length > 0 && (
-                    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6, maxHeight: 150, overflowY: "auto" }}>
-                      {champSearchResults.map((club) => (
-                        <div
-                          key={club.id}
-                          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "6px 10px", backgroundColor: theme.bgCard, borderRadius: 6, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, fontSize: 13, cursor: "pointer" }}
-                          onClick={() => {
-                            setSelectedClubForChamp(club);
-                            setChampSearchQuery("");
-                            setChampSearchResults([]);
-                          }}
-                        >
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <img src={club.crestUrl || `/badges/${club.slug}.webp`} alt="" style={{ width: 20, height: 20, objectFit: "contain" }} />
-                            <span style={{ fontWeight: 600, fontSize: 13, color: theme.textPrimary }}>{club.fullName}</span>
+                    <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 6, maxHeight: 180, overflowY: "auto" }}>
+                      {champSearchResults.map((club) => {
+                        const isMember = memberClubsForChampions.some((m) => m.id === club.id);
+                        return (
+                          <div
+                            key={club.id}
+                            style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", backgroundColor: isMember ? "#f0fdf4" : "#ffffff", borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: isMember ? "#bbf7d0" : "#e2e8f0", fontSize: 13 }}
+                          >
+                            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                              <img
+                                src={club.crestUrl || `/badges/${club.slug}.webp`}
+                                alt=""
+                                style={{ width: 24, height: 24, objectFit: "contain", flexShrink: 0 }}
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.visibility = "hidden";
+                                }}
+                              />
+                              <div>
+                                <div style={{ fontWeight: 600, color: "#0f172a", display: "flex", alignItems: "center", gap: 6 }}>
+                                  <span>{club.fullName}</span>
+                                  {isMember && (
+                                    <span style={{ fontSize: 10, fontWeight: 700, color: "#166534", backgroundColor: "#dcfce7", borderRadius: 4, padding: "2px 6px" }}>
+                                      ✓ Equipo integrante
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: 11, color: "#64748b" }}>
+                                  {club.locality?.name ? `${club.locality.name}${club.locality.province?.name ? `, ${club.locality.province.name}` : ""}` : "Sin ubicación"}
+                                </div>
+                              </div>
+                            </div>
+
+                            <button
+                              type="button"
+                              onClick={() => handleSelectClubForChamp(club)}
+                              style={{ padding: "5px 12px", borderRadius: 6, backgroundColor: "#2563eb", color: "#ffffff", fontWeight: 700, fontSize: 12, border: "none", cursor: "pointer", flexShrink: 0 }}
+                            >
+                              + Seleccionar
+                            </button>
                           </div>
-                          <span style={{ fontSize: 12, color: "#2563eb", fontWeight: 600 }}>Seleccionar</span>
-                        </div>
-                      ))}
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {!champSearchQuery && memberClubsForChampions.length > 0 && (
+                    <div style={{ marginTop: 12 }}>
+                      <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em", display: "block", marginBottom: 8 }}>
+                        Selección Rápida: Equipos integrantes de esta liga ({memberClubsForChampions.length})
+                      </span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 200, overflowY: "auto" }}>
+                        {[...memberClubsForChampions]
+                          .sort((a, b) => (a.fullName || "").localeCompare(b.fullName || ""))
+                          .map((club) => (
+                            <div
+                              key={club.id}
+                              style={{
+                                display: "flex",
+                                alignItems: "center",
+                                justifyContent: "space-between",
+                                padding: "8px 12px",
+                                backgroundColor: "#ffffff",
+                                borderRadius: 8,
+                                borderWidth: 1,
+                                borderStyle: "solid",
+                                borderColor: "#e2e8f0",
+                                fontSize: 13,
+                              }}
+                            >
+                              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                                <img
+                                  src={club.crestUrl || `/badges/${club.slug}.webp`}
+                                  alt=""
+                                  style={{ width: 24, height: 24, objectFit: "contain", flexShrink: 0 }}
+                                  onError={(e) => {
+                                    (e.target as HTMLImageElement).style.visibility = "hidden";
+                                  }}
+                                />
+                                <div>
+                                  <div style={{ fontWeight: 600, color: "#0f172a" }}>{club.fullName}</div>
+                                  <div style={{ fontSize: 11, color: "#64748b" }}>
+                                    {club.locality?.name ? `${club.locality.name}${club.locality.province?.name ? `, ${club.locality.province.name}` : ""}` : "Sin ubicación"}
+                                  </div>
+                                </div>
+                              </div>
+
+                              <button
+                                type="button"
+                                onClick={() => handleSelectClubForChamp(club)}
+                                style={{
+                                  padding: "5px 12px",
+                                  borderRadius: 6,
+                                  backgroundColor: "#2563eb",
+                                  color: "#ffffff",
+                                  fontWeight: 700,
+                                  fontSize: 12,
+                                  border: "none",
+                                  cursor: "pointer",
+                                  flexShrink: 0,
+                                }}
+                              >
+                                + Seleccionar
+                              </button>
+                            </div>
+                          ))}
+                      </div>
                     </div>
                   )}
                 </div>
               ) : (
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: theme.bgCard, padding: "8px 12px", borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol }}>
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", backgroundColor: "#ffffff", padding: "10px 14px", borderRadius: 10, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1" }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                    <img src={selectedClubForChamp.crestUrl || `/badges/${selectedClubForChamp.slug}.webp`} alt="" style={{ width: 24, height: 24, objectFit: "contain" }} />
-                    <span style={{ fontWeight: 700, fontSize: 14, color: theme.textPrimary }}>{selectedClubForChamp.fullName}</span>
+                    <img
+                      src={selectedClubForChamp.crestUrl || `/badges/${selectedClubForChamp.slug}.webp`}
+                      alt=""
+                      style={{ width: 28, height: 28, objectFit: "contain", flexShrink: 0 }}
+                    />
+                    <div>
+                      <div style={{ fontWeight: 700, fontSize: 14, color: "#0f172a" }}>{selectedClubForChamp.fullName}</div>
+                      <div style={{ fontSize: 11, color: "#64748b" }}>
+                        {selectedClubForChamp.locality?.name ? `${selectedClubForChamp.locality.name}${selectedClubForChamp.locality.province?.name ? `, ${selectedClubForChamp.locality.province.name}` : ""}` : ""}
+                      </div>
+                    </div>
                   </div>
 
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <input
                       type="number"
                       min="1"
-                      style={{ width: 70, padding: "4px 8px", borderRadius: 6, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, backgroundColor: theme.bgInput, color: theme.textPrimary, fontSize: 13 }}
+                      style={{ width: 70, padding: "6px 8px", borderRadius: 6, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", backgroundColor: "#ffffff", color: "#0f172a", fontSize: 13 }}
                       value={champTitleCount}
                       onChange={(e) => setChampTitleCount(Math.max(1, parseInt(e.target.value) || 1))}
                     />
-                    <span style={{ fontSize: 12, color: theme.textMuted }}>títulos</span>
+                    <span style={{ fontSize: 12, color: "#64748b" }}>títulos</span>
 
-                    <button type="button" disabled={champSaving} onClick={handleSaveChampionTitle} style={{ padding: "5px 12px", borderRadius: 6, backgroundColor: "#2563eb", color: "#ffffff", fontWeight: 700, fontSize: 12, border: "none", cursor: "pointer" }}>
+                    <button type="button" disabled={champSaving} onClick={handleSaveChampionTitle} style={{ padding: "6px 14px", borderRadius: 6, backgroundColor: "#2563eb", color: "#ffffff", fontWeight: 700, fontSize: 12, border: "none", cursor: "pointer" }}>
                       {champSaving ? "Guardando..." : "Guardar Título"}
                     </button>
 
-                    <button type="button" onClick={() => setSelectedClubForChamp(null)} style={{ border: "none", background: "transparent", cursor: "pointer", color: theme.textMuted }}>
+                    <button type="button" onClick={() => { setSelectedClubForChamp(null); setChampTitleCount(1); }} style={{ border: "none", background: "transparent", cursor: "pointer", color: "#64748b", display: "flex" }}>
                       <X size={16} />
                     </button>
                   </div>
@@ -1440,27 +1694,27 @@ export default function CompetitionsAdminPage() {
 
             {/* Lista de Campeones Registrados */}
             <div>
-              <h4 style={{ fontSize: 12, fontWeight: 700, color: theme.textMuted, textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
+              <h4 style={{ fontSize: 12, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 8 }}>
                 Tabla de Campeones Registrados ({championsList.length})
               </h4>
 
               {championsLoading ? (
-                <div style={{ padding: 20, textAlign: "center", color: theme.textMuted, fontSize: 13, backgroundColor: theme.bgInput, borderRadius: 8, borderWidth: 1, borderStyle: "dashed", borderColor: theme.borderCol }}>
+                <div style={{ padding: 20, textAlign: "center", color: "#64748b", fontSize: 13, backgroundColor: "#f8fafc", borderRadius: 8, borderWidth: 1, borderStyle: "dashed", borderColor: "#cbd5e1" }}>
                   Cargando palmarés...
                 </div>
               ) : championsList.length === 0 ? (
-                <div style={{ padding: 20, textAlign: "center", color: theme.textMuted, fontSize: 13, backgroundColor: theme.bgInput, borderRadius: 8, borderWidth: 1, borderStyle: "dashed", borderColor: theme.borderCol }}>
+                <div style={{ padding: 20, textAlign: "center", color: "#64748b", fontSize: 13, backgroundColor: "#f8fafc", borderRadius: 8, borderWidth: 1, borderStyle: "dashed", borderColor: "#cbd5e1" }}>
                   No hay campeones registrados para este torneo aún.
                 </div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 6, maxHeight: 240, overflowY: "auto" }}>
                   {championsList.map((c) => (
-                    <div key={c.titleId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", backgroundColor: theme.bgCard, borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, fontSize: 13 }}>
+                    <div key={c.titleId} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", backgroundColor: "#ffffff", borderRadius: 8, borderWidth: 1, borderStyle: "solid", borderColor: "#e2e8f0", fontSize: 13 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                         <img src={c.crestUrl} alt="" style={{ width: 28, height: 28, objectFit: "contain" }} />
                         <div>
-                          <div style={{ fontWeight: 700, color: theme.textPrimary, fontSize: 14 }}>{c.clubName}</div>
-                          <div style={{ fontSize: 11, color: theme.textMuted }}>{c.clubFullName}</div>
+                          <div style={{ fontWeight: 700, color: "#0f172a", fontSize: 14 }}>{c.clubName}</div>
+                          <div style={{ fontSize: 11, color: "#64748b" }}>{c.clubFullName}</div>
                         </div>
                       </div>
 
@@ -1479,7 +1733,7 @@ export default function CompetitionsAdminPage() {
             </div>
 
             <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 20 }}>
-              <button type="button" onClick={() => setChampionsModalOpen(false)} style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: theme.bgInput, color: theme.textPrimary, fontWeight: 600, fontSize: 13, borderWidth: 1, borderStyle: "solid", borderColor: theme.borderCol, cursor: "pointer" }}>
+              <button type="button" onClick={() => setChampionsModalOpen(false)} style={{ padding: "9px 18px", borderRadius: 8, backgroundColor: "#f1f5f9", color: "#334155", fontWeight: 600, fontSize: 13, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", cursor: "pointer" }}>
                 Cerrar
               </button>
             </div>
