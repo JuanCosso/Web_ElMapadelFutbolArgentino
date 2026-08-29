@@ -13,13 +13,10 @@ export const STYLE: StyleSpecification = {
       type: "raster",
       tileSize: 256,
       tiles: [
-        "https://a.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png",
-        "https://b.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png",
-        "https://c.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png",
-        "https://d.basemaps.cartocdn.com/rastertiles/voyager_nolabels/{z}/{x}/{y}.png",
+        "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
       ],
       attribution:
-        '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> &copy; <a href="https://carto.com/">CARTO</a>',
+        '&copy; <a href="https://www.esri.com/">Esri</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
     },
 
     esri_world_imagery: {
@@ -97,30 +94,34 @@ export const STYLE: StyleSpecification = {
         "line-width": ["case", ["boolean", ["feature-state", "selected"], false], 2, 1],
       },
     },
-  
+
     // Mostrar escudos recién desde un zoom cercano:
-
-{
-  id: "clubs_icons",
-  type: "symbol",
-  source: "clubs",
-  minzoom: CLUBS_MINZOOM,
-  layout: {
-    "icon-image": ["get", "club_id"],
-    "icon-size": [
-      "interpolate", ["linear"], ["zoom"],
-      CLUBS_MINZOOM, 0.12,
-      9, 0.22,
-      12, 0.35,
-      15, 0.50
-    ],
-    "icon-allow-overlap": true,
-    "icon-ignore-placement": true,
-    "icon-anchor": "center",
-    "symbol-sort-key": ["coalesce", ["get", "sort_order"], 0],
-    "symbol-z-order": "auto",
-  },
-}
-
+    {
+      id: "clubs_icons",
+      type: "symbol",
+      source: "clubs",
+      minzoom: CLUBS_MINZOOM,
+      layout: {
+        "icon-image": ["get", "club_id"],
+        "icon-size": [
+          "interpolate",
+          ["linear"],
+          ["zoom"],
+          CLUBS_MINZOOM,
+          0.12,
+          9,
+          0.22,
+          12,
+          0.35,
+          15,
+          0.50,
+        ],
+        "icon-allow-overlap": true,
+        "icon-ignore-placement": true,
+        "icon-anchor": "center",
+        "symbol-sort-key": ["coalesce", ["get", "sort_order"], 0],
+        "symbol-z-order": "auto",
+      },
+    },
   ],
 };
