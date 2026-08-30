@@ -193,6 +193,7 @@ export async function getClubDetail(slug: string) {
         include: {
           locality: { include: { province: true } },
           localLeague: true,
+          competitions: { orderBy: { level: "asc" } },
           titles: { orderBy: { name: "asc" } },
         },
       });
@@ -207,6 +208,13 @@ export async function getClubDetail(slug: string) {
           province: club.locality.province.name,
           city: club.locality.name,
           league: club.localLeague?.name ?? null,
+          localLeague: club.localLeague
+            ? {
+                id: club.localLeague.id,
+                name: club.localLeague.name,
+                logoUrl: club.localLeague.logoUrl,
+              }
+            : null,
           stadium: club.stadiumName,
           stadiumCapacity: club.stadiumCapacity,
           stadium_capacity: club.stadiumCapacity,
@@ -215,6 +223,14 @@ export async function getClubDetail(slug: string) {
           short_history: club.history,
           history: club.history,
           honours: club.titles.map((title) => ({ title: title.name, count: title.count })),
+          updatedAt: club.updatedAt ? club.updatedAt.toISOString() : undefined,
+          competitions: club.competitions.map((comp) => ({
+            id: comp.id,
+            name: comp.name,
+            slug: comp.slug,
+            level: comp.level,
+            logoUrl: comp.logoUrl,
+          })),
         };
       }
     } catch (e) {
@@ -227,12 +243,14 @@ export async function getClubDetail(slug: string) {
     const filePath = path.join(process.cwd(), "public", "clubs", `${slug}.json`);
     if (fs.existsSync(filePath)) {
       const data = JSON.parse(fs.readFileSync(filePath, "utf-8"));
+      const stat = fs.statSync(filePath);
       return {
         ...data,
         short_history: data.short_history || data.history,
         history: data.history || data.short_history,
         badgeUrl: data.badgeUrl || data.badge_url || data.crestUrl,
         stadiumCapacity: data.stadiumCapacity || data.stadium_capacity,
+        updatedAt: data.updatedAt || stat.mtime.toISOString(),
       };
     }
   } catch {}
@@ -294,9 +312,13 @@ export async function getLeagueDetail(slug: string) {
 
       if (league) {
         const targetName = normKey(league.name);
+        const latestUpdate = league.clubs.reduce<Date | null>((latest, c) => {
+          if (!c.updatedAt) return latest;
+          return !latest || c.updatedAt > latest ? c.updatedAt : latest;
+        }, null);
+
         const champions = league.clubs
           .map((c) => {
-            // Filtrar títulos pertenecientes específicamente a esta liga
             const leagueTitles = c.titles.filter((t) => {
               const tName = normKey(t.name);
               return tName.includes(targetName) || targetName.includes(tName);
@@ -321,6 +343,7 @@ export async function getLeagueDetail(slug: string) {
           organizer: league.organizer,
           foundation: league.foundation,
           logoUrl: league.logoUrl,
+          updatedAt: latestUpdate ? latestUpdate.toISOString() : undefined,
           champions,
         };
       }
@@ -337,9 +360,13 @@ export async function getLeagueDetail(slug: string) {
 
       if (comp) {
         const targetName = normKey(comp.name);
+        const latestUpdate = comp.clubs.reduce<Date | null>((latest, c) => {
+          if (!c.updatedAt) return latest;
+          return !latest || c.updatedAt > latest ? c.updatedAt : latest;
+        }, null);
+
         const champions = comp.clubs
           .map((c) => {
-            // Filtrar títulos pertenecientes específicamente a esta competencia
             const compTitles = c.titles.filter((t) => {
               const tName = normKey(t.name);
               return tName.includes(targetName) || targetName.includes(tName);
@@ -363,6 +390,7 @@ export async function getLeagueDetail(slug: string) {
           level: comp.level,
           foundation: comp.foundation,
           logoUrl: comp.logoUrl,
+          updatedAt: latestUpdate ? latestUpdate.toISOString() : undefined,
           champions,
         };
       }

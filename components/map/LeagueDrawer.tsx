@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Trophy, Calendar, MapPin, Shield, Users } from "lucide-react";
+import { Trophy, Calendar, MapPin, Shield, Users, Clock } from "lucide-react";
+import { formatUpdateDate } from "@/utils/formatDate";
 
 export type LeagueInfo = {
   leagueId: string;
@@ -25,6 +26,7 @@ type LeagueDetail = {
   organizer?: string;
   foundation?: string;
   logoUrl?: string;
+  updatedAt?: string;
   champions?: ClubLeagueItem[];
 };
 
@@ -391,6 +393,19 @@ export default function LeagueDrawer({
             )}
           </div>
         </div>
+
+        {/* Footer: Última actualización */}
+        {data?.updatedAt && (
+          <div
+            className={[
+              "px-4 py-2.5 border-t text-center text-[11px] font-medium flex items-center justify-center gap-1.5 shrink-0 transition-colors",
+              isDark ? "border-white/10 bg-gray-950/60 text-gray-400" : "border-gray-100 bg-gray-50 text-gray-500",
+            ].join(" ")}
+          >
+            <Clock size={12} />
+            <span>Última actualización: {formatUpdateDate(data.updatedAt)}</span>
+          </div>
+        )}
       </aside>
     </div>
   );

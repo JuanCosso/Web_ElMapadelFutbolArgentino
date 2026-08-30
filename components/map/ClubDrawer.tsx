@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { ClubInfo } from "./MapView";
 import Link from "next/link";
+import { formatUpdateDate } from "@/utils/formatDate";
 
 type NearbyClub = {
   name: string;
@@ -26,7 +27,7 @@ type ClubDetail = {
   club_id: string;
   name?: string;
   full_name?: string;
-  founded?: number;
+  founded?: number | string;
   nickname?: string[] | string;
   province?: string;
   city?: string;
@@ -38,6 +39,7 @@ type ClubDetail = {
   short_history?: string;
   history?: string;
   nearby?: NearbyClub[];
+  updatedAt?: string;
 };
 
 // --- Componentes UI adaptados a la imagen de referencia ---
@@ -533,6 +535,19 @@ export default function ClubDrawer({
             )}
           </div>
         </div>
+
+        {/* Footer: Última actualización */}
+        {validData?.updatedAt && (
+          <div
+            className={[
+              "px-4 py-2.5 border-t text-center text-[11px] font-medium flex items-center justify-center gap-1.5 shrink-0 transition-colors",
+              isDark ? "border-white/10 bg-gray-950/60 text-gray-400" : "border-gray-100 bg-gray-50 text-gray-500",
+            ].join(" ")}
+          >
+            <Clock size={12} />
+            <span>Última actualización: {formatUpdateDate(validData.updatedAt)}</span>
+          </div>
+        )}
       </aside>
     </div>
   );

@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { ClubCrest } from "@/components/club/ClubCrest";
+import { formatUpdateDate } from "@/utils/formatDate";
 import {
   MapPin,
   Shield,
@@ -11,6 +12,8 @@ import {
   Compass,
   ArrowLeft,
   Globe,
+  Calendar,
+  Clock,
 } from "lucide-react";
 
 // Generamos los Metadata para SEO
@@ -39,30 +42,31 @@ export default async function ClubPage({ params }: { params: Promise<{ slug: str
     include: {
       locality: { include: { province: true } },
       localLeague: true,
-      competitions: true,
+      competitions: { orderBy: { level: "asc" } },
       titles: { orderBy: { count: "desc" } },
     },
   });
 
   if (!club) return notFound();
 
-  // Determinación de color de acento por jerarquía
-  const minLvl = club.competitions && club.competitions.length > 0
-    ? Math.min(...club.competitions.map((c) => c.level ?? 8))
-    : 8;
+  // Determinación de competencia principal y color de acento
+  const sortedComps = club.competitions ? [...club.competitions].sort((a, b) => (a.level ?? 8) - (b.level ?? 8)) : [];
+  const primaryComp = sortedComps.length > 0 ? sortedComps[0] : null;
+
+  const minLvl = primaryComp?.level ?? 8;
 
   let accentColor = "#64748b";
-  let tierLabel = "Liga Regional";
   if (minLvl === 1 || minLvl === 2) {
     accentColor = "#eab308";
-    tierLabel = "Liga Profesional AFA";
   } else if (minLvl === 3) {
     accentColor = "#2563eb";
-    tierLabel = "Primera Nacional";
   } else if (minLvl === 4 || minLvl === 5) {
     accentColor = "#9333ea";
-    tierLabel = "Federal A / Regional Amateur";
   }
+
+  // Nombre de competencia principal concreta a mostrar (no más texto genérico "Liga Profesional AFA")
+  const primaryCompName = primaryComp?.name || club.localLeague?.name || "Liga Regional";
+  const primaryCompLogo = primaryComp?.logoUrl || club.localLeague?.logoUrl;
 
   return (
     <div style={s.page}>
@@ -96,8 +100,15 @@ export default async function ClubPage({ params }: { params: Promise<{ slug: str
             {/* Información del Club */}
             <div style={{ minWidth: 0, flex: 1, display: "flex", flexDirection: "column", gap: 8 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                <span style={{ ...s.tierBadge, borderColor: accentColor, color: accentColor }}>
-                  {tierLabel}
+                <span style={{ ...s.tierBadge, borderColor: accentColor, color: accentColor, display: "inline-flex", alignItems: "center", gap: 6 }}>
+                  {primaryCompLogo && (
+                    <img
+                      src={primaryCompLogo}
+                      alt=""
+                      style={{ width: 18, height: 18, objectFit: "contain" }}
+                    />
+                  )}
+                  {primaryCompName}
                 </span>
                 {club.nickname && (
                   <span style={s.nicknameBadge}>
@@ -114,7 +125,7 @@ export default async function ClubPage({ params }: { params: Promise<{ slug: str
                 </div>
               )}
 
-              {/* Tags de Ubicación y Liga */}
+              {/* Tags de Ubicación, Liga y Fundación (Sector Principal) */}
               <div style={s.tagsRow}>
                 <div style={s.tagItem}>
                   <MapPin size={15} style={{ color: "#2563eb" }} />
@@ -124,21 +135,45 @@ export default async function ClubPage({ params }: { params: Promise<{ slug: str
                 </div>
 
                 <div style={s.tagItem}>
-                  <Shield size={15} style={{ color: "#2563eb" }} />
+                  {club.localLeague?.logoUrl ? (
+                    <img
+                      src={club.localLeague.logoUrl}
+                      alt=""
+                      style={{ width: 16, height: 16, objectFit: "contain" }}
+                    />
+                  ) : (
+                    <Shield size={15} style={{ color: "#2563eb" }} />
+                  )}
                   <span>
                     {club.localLeague?.name || "Directamente Afiliado a AFA"}
                   </span>
                 </div>
+
+                {club.foundation && (
+                  <div style={s.tagItem}>
+                    <Calendar size={15} style={{ color: "#2563eb" }} />
+                    <span>
+                      Fundación: {club.foundation}
+                    </span>
+                  </div>
+                )}
               </div>
 
-              {/* Pills de Competencias */}
+              {/* Pills de Competencias con Logos */}
               {club.competitions.length > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap", marginTop: 4 }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase" }}>
                     Competencias:
                   </span>
                   {club.competitions.map((comp) => (
-                    <span key={comp.id} style={s.compPill}>
+                    <span key={comp.id} style={{ ...s.compPill, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                      {comp.logoUrl && (
+                        <img
+                          src={comp.logoUrl}
+                          alt=""
+                          style={{ width: 14, height: 14, objectFit: "contain" }}
+                        />
+                      )}
                       {comp.name}
                     </span>
                   ))}
@@ -168,11 +203,6 @@ export default async function ClubPage({ params }: { params: Promise<{ slug: str
                 <span style={s.dataVal}>
                   {club.stadiumCapacity ? `${club.stadiumCapacity.toLocaleString("es-AR")} espectadores` : "Sin especificar"}
                 </span>
-              </div>
-
-              <div style={s.dataRow}>
-                <span style={s.dataLabel}>Fecha de Fundación</span>
-                <span style={s.dataVal}>{club.foundation || "No registrada"}</span>
               </div>
             </div>
           </div>
@@ -217,6 +247,14 @@ export default async function ClubPage({ params }: { params: Promise<{ slug: str
             <p style={s.historyText}>{club.history}</p>
           </div>
         )}
+
+        {/* Footer: Última fecha de actualización */}
+        <div style={{ marginTop: "2rem", textAlign: "center", fontSize: 12, color: "#94a3b8", fontWeight: 500 }}>
+          <span style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+            <Clock size={13} />
+            Última actualización: {formatUpdateDate(club.updatedAt)}
+          </span>
+        </div>
       </main>
     </div>
   );
