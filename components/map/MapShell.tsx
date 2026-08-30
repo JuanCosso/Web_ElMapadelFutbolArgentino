@@ -44,6 +44,8 @@ export default function MapShell() {
     flyTo: (center: [number, number], zoom?: number) => void;
     fitBBox: (bbox: [number, number, number, number]) => void;
     clearFilter: () => void;
+    zoomIn: () => void;
+    zoomOut: () => void;
   } | null>(null);
 
   const [provinceInfo, setProvinceInfo] = useState<ProvinceInfo | null>(null);
@@ -168,12 +170,15 @@ export default function MapShell() {
     }
   };
 
+  const isDark = basemap === "dark";
+
   return (
     <div className="relative h-[100dvh] w-screen max-w-full overflow-hidden">
       <SearchBar
         index={searchIndex}
         onSelect={onSearchSelect}
         isDrawerOpen={drawerOpen || leagueDrawerOpen}
+        isDark={isDark}
       />
 
       <MapView
@@ -193,6 +198,7 @@ export default function MapShell() {
         provinceInfo={provinceInfo}
         activeClub={panelClub}
         isHover={!!hoverClub}
+        isDark={isDark}
       />
 
       <MapLayerControl
@@ -201,12 +207,16 @@ export default function MapShell() {
         roads={roads}
         setRoads={setRoads}
         onHome={goHome}
+        onZoomIn={() => mapApi?.zoomIn()}
+        onZoomOut={() => mapApi?.zoomOut()}
+        isDark={isDark}
       />
 
       <ClubDrawer
         open={drawerOpen}
         club={selectedClub}
         onClose={closeClub}
+        isDark={isDark}
       />
 
       <LeagueDrawer
@@ -214,6 +224,7 @@ export default function MapShell() {
         league={selectedLeague}
         onClose={closeLeague}
         onSelectClub={handleSelectClubFromLeague}
+        isDark={isDark}
       />
     </div>
   );

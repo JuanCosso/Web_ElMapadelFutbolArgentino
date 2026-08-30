@@ -9,9 +9,10 @@ type Props = {
   index: SearchItem[];
   onSelect: (item: SearchItem) => void;
   isDrawerOpen?: boolean;
+  isDark?: boolean;
 };
 
-function TypePill({ t }: { t: SearchItem["type"] }) {
+function TypePill({ t, isDark }: { t: SearchItem["type"]; isDark?: boolean }) {
   const label =
     t === "club"
       ? "Club"
@@ -21,7 +22,14 @@ function TypePill({ t }: { t: SearchItem["type"] }) {
       ? "Liga"
       : "Provincia";
   return (
-    <span className="text-[10px] font-bold tracking-wide text-gray-600 bg-gray-100 border border-black/10 rounded-lg px-2 py-0.5">
+    <span
+      className={[
+        "text-[10px] font-bold tracking-wide rounded-lg px-2 py-0.5 border",
+        isDark
+          ? "text-gray-300 bg-gray-800 border-white/10"
+          : "text-gray-600 bg-gray-100 border-black/10",
+      ].join(" ")}
+    >
       {label}
     </span>
   );
@@ -59,7 +67,7 @@ function SearchClubBadge({
   );
 }
 
-export default function SearchBar({ index, onSelect, isDrawerOpen }: Props) {
+export default function SearchBar({ index, onSelect, isDrawerOpen, isDark }: Props) {
   const [q, setQ] = useState("");
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -94,13 +102,24 @@ export default function SearchBar({ index, onSelect, isDrawerOpen }: Props) {
       ref={ref}
       className="absolute top-3 sm:top-4 left-1/2 -translate-x-1/2 z-30 transition-all duration-300 w-[92vw] sm:w-[380px] md:w-[410px] lg:w-[430px] max-w-[calc(100vw-2rem)]"
     >
-      <div className="rounded-2xl border border-black/10 bg-white/90 backdrop-blur-md shadow-lg">
+      <div
+        className={[
+          "rounded-2xl border backdrop-blur-md shadow-lg transition-colors",
+          isDark
+            ? "bg-gray-900/90 border-white/20 text-white"
+            : "bg-white/90 border-black/10 text-gray-900",
+        ].join(" ")}
+      >
         <div className="flex items-center gap-2.5 px-3 py-2">
-          {/* Lupa con el mismo tono y efecto hover que el botón X del panel */}
           <button
             type="button"
             onClick={() => setOpen(true)}
-            className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gray-100 text-gray-600 flex items-center justify-center hover:bg-gray-200 transition-colors shrink-0 cursor-pointer"
+            className={[
+              "w-9 h-9 sm:w-10 sm:h-10 rounded-full flex items-center justify-center transition-colors shrink-0 cursor-pointer",
+              isDark
+                ? "bg-gray-800 text-gray-300 hover:bg-gray-700"
+                : "bg-gray-100 text-gray-600 hover:bg-gray-200",
+            ].join(" ")}
             aria-label="Buscar"
           >
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -118,7 +137,10 @@ export default function SearchBar({ index, onSelect, isDrawerOpen }: Props) {
             }}
             onFocus={() => setOpen(true)}
             placeholder="Buscar provincia, ciudad, liga o club…"
-            className="w-full bg-transparent outline-none text-sm text-gray-900 placeholder:text-gray-400 py-2 font-medium"
+            className={[
+              "w-full bg-transparent outline-none text-sm py-2 font-medium",
+              isDark ? "text-white placeholder:text-gray-400" : "text-gray-900 placeholder:text-gray-400",
+            ].join(" ")}
             onKeyDown={(e) => {
               if (!open) return;
               if (e.key === "ArrowDown") {
@@ -140,15 +162,33 @@ export default function SearchBar({ index, onSelect, isDrawerOpen }: Props) {
       </div>
 
       {open && q.trim() && results.length > 0 && (
-        <div className="mt-2 rounded-2xl border border-black/10 bg-white shadow-xl overflow-hidden">
+        <div
+          className={[
+            "mt-2 rounded-2xl border shadow-xl overflow-hidden transition-colors",
+            isDark ? "bg-gray-900 border-white/20 text-white" : "bg-white border-black/10 text-gray-900",
+          ].join(" ")}
+        >
           <div className="max-h-[420px] overflow-auto">
-            <div className="px-3 py-2 text-xs text-gray-500 border-b border-black/5">
-              Mostrando <span className="font-semibold text-gray-700">{results.length}</span>{" "}
+            <div
+              className={[
+                "px-3 py-2 text-xs border-b",
+                isDark ? "text-gray-400 border-white/10" : "text-gray-500 border-black/5",
+              ].join(" ")}
+            >
+              Mostrando{" "}
+              <span className={isDark ? "font-semibold text-gray-200" : "font-semibold text-gray-700"}>
+                {results.length}
+              </span>{" "}
               resultados
             </div>
 
             {hasProv && (
-              <div className="px-3 pt-3 pb-1 text-[11px] font-bold tracking-wide text-gray-600">
+              <div
+                className={[
+                  "px-3 pt-3 pb-1 text-[11px] font-bold tracking-wide",
+                  isDark ? "text-gray-400 uppercase" : "text-gray-600 uppercase",
+                ].join(" ")}
+              >
                 PROVINCIAS
               </div>
             )}
@@ -169,7 +209,12 @@ export default function SearchBar({ index, onSelect, isDrawerOpen }: Props) {
               return (
                 <div key={`${r.type}:${r.key}`}>
                   {showHeader && (
-                    <div className="px-3 pt-3 pb-1 text-[11px] font-bold tracking-wide text-gray-600">
+                    <div
+                      className={[
+                        "px-3 pt-3 pb-1 text-[11px] font-bold tracking-wide",
+                        isDark ? "text-gray-400 uppercase" : "text-gray-600 uppercase",
+                      ].join(" ")}
+                    >
                       {headerTitle}
                     </div>
                   )}
@@ -178,12 +223,17 @@ export default function SearchBar({ index, onSelect, isDrawerOpen }: Props) {
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => pick(i)}
                     className={[
-                      "w-full text-left px-3 py-2 flex items-center gap-3",
-                      "hover:bg-gray-50 transition-colors",
-                      i === active ? "bg-gray-50" : "",
+                      "w-full text-left px-3 py-2 flex items-center gap-3 transition-colors",
+                      isDark
+                        ? i === active
+                          ? "bg-gray-800"
+                          : "hover:bg-gray-800/80"
+                        : i === active
+                        ? "bg-gray-50"
+                        : "hover:bg-gray-50",
                     ].join(" ")}
                   >
-                    <TypePill t={r.type} />
+                    <TypePill t={r.type} isDark={isDark} />
 
                     {r.type === "club" ? (
                       <SearchClubBadge
@@ -199,40 +249,90 @@ export default function SearchBar({ index, onSelect, isDrawerOpen }: Props) {
                           className="w-6 h-6 rounded-md object-contain shrink-0"
                         />
                       ) : (
-                        <span className="w-6 h-6 rounded-md bg-yellow-50 border border-yellow-200 text-yellow-600 flex items-center justify-center shrink-0">
+                        <span
+                          className={[
+                            "w-6 h-6 rounded-md border flex items-center justify-center shrink-0",
+                            isDark
+                              ? "bg-yellow-950/60 border-yellow-800/60 text-yellow-400"
+                              : "bg-yellow-50 border-yellow-200 text-yellow-600",
+                          ].join(" ")}
+                        >
                           <Trophy size={13} />
                         </span>
                       )
                     ) : r.type === "province" ? (
-                      <span className="w-6 h-6 rounded-md bg-gray-100 border border-black/10 flex items-center justify-center shrink-0 text-gray-500">
+                      <span
+                        className={[
+                          "w-6 h-6 rounded-md border flex items-center justify-center shrink-0",
+                          isDark
+                            ? "bg-gray-800 border-gray-700 text-gray-300"
+                            : "bg-gray-100 border-black/10 text-gray-500",
+                        ].join(" ")}
+                      >
                         <MapPin size={13} />
                       </span>
                     ) : (
-                      <span className="w-6 h-6 rounded-md bg-gray-100 border border-black/10 flex items-center justify-center shrink-0 text-gray-500">
+                      <span
+                        className={[
+                          "w-6 h-6 rounded-md border flex items-center justify-center shrink-0",
+                          isDark
+                            ? "bg-gray-800 border-gray-700 text-gray-300"
+                            : "bg-gray-100 border-black/10 text-gray-500",
+                        ].join(" ")}
+                      >
                         <Building2 size={13} />
                       </span>
                     )}
 
                     <div className="min-w-0 flex-1">
-                      <div className="text-sm font-semibold text-gray-900 leading-tight flex items-center gap-2">
+                      <div
+                        className={[
+                          "text-sm font-semibold leading-tight flex items-center gap-2",
+                          isDark ? "text-white" : "text-gray-900",
+                        ].join(" ")}
+                      >
                         <span>{r.label}</span>
                         {r.type === "province" ? (
-                          <span className="text-xs font-medium text-gray-500">
+                          <span
+                            className={[
+                              "text-xs font-medium",
+                              isDark ? "text-gray-400" : "text-gray-500",
+                            ].join(" ")}
+                          >
                             ({r.countCities} ciudades · {r.countClubs} clubes)
                           </span>
                         ) : r.type === "city" ? (
-                          <span className="text-xs font-medium text-gray-500">
+                          <span
+                            className={[
+                              "text-xs font-medium",
+                              isDark ? "text-gray-400" : "text-gray-500",
+                            ].join(" ")}
+                          >
                             ({r.countClubs} clubes)
                           </span>
                         ) : null}
                       </div>
 
                       {"sublabel" in r && r.sublabel ? (
-                        <div className="text-xs text-gray-500 truncate">{r.sublabel}</div>
+                        <div
+                          className={[
+                            "text-xs truncate",
+                            isDark ? "text-gray-400" : "text-gray-500",
+                          ].join(" ")}
+                        >
+                          {r.sublabel}
+                        </div>
                       ) : null}
 
                       {"full_name" in r && r.full_name ? (
-                        <div className="text-xs text-gray-400 truncate">{r.full_name}</div>
+                        <div
+                          className={[
+                            "text-xs truncate",
+                            isDark ? "text-gray-400" : "text-gray-400",
+                          ].join(" ")}
+                        >
+                          {r.full_name}
+                        </div>
                       ) : null}
                     </div>
                   </button>

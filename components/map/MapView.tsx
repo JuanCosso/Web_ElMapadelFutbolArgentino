@@ -48,6 +48,19 @@ function normalizePublicUrl(u: string) {
   return `/${x}`;
 }
 
+function getTopClubFeature(features?: MapGeoJSONFeature[]): MapGeoJSONFeature | undefined {
+  if (!features || features.length === 0) return undefined;
+  if (features.length === 1) return features[0];
+
+  const sorted = [...features].sort((a, b) => {
+    const sortA = Number(a.properties?.sort_order ?? (100 - Number(a.properties?.level ?? 8)));
+    const sortB = Number(b.properties?.sort_order ?? (100 - Number(b.properties?.level ?? 8)));
+    return sortB - sortA;
+  });
+
+  return sorted[0];
+}
+
 export default function MapView({
   basemap,
   showRoads,
@@ -67,6 +80,8 @@ export default function MapView({
     flyTo: (center: [number, number], zoom?: number) => void;
     fitBBox: (bbox: [number, number, number, number]) => void;
     clearFilter: () => void;
+    zoomIn: () => void;
+    zoomOut: () => void;
   } | null) => void;
 }) {
   const divRef = useRef<HTMLDivElement | null>(null);
@@ -114,7 +129,6 @@ export default function MapView({
       renderWorldCopies: false,
     });
 
-    map.addControl(new maplibregl.NavigationControl({ showCompass: false }), "top-right");
     mapRef.current = map;
 
     onMapApiReady?.({
@@ -131,6 +145,8 @@ export default function MapView({
         );
       },
       clearFilter: () => clearProvinceSelection(),
+      zoomIn: () => map.zoomIn(),
+      zoomOut: () => map.zoomOut(),
     });
 
     const PROV_EXPR: ExpressionSpecification = [
@@ -177,6 +193,7 @@ export default function MapView({
     const setBasemapVisibility = () => {
       if (!map.getLayer("bm_streets")) return;
       map.setLayoutProperty("bm_streets", "visibility", basemap === "streets" ? "visible" : "none");
+      map.setLayoutProperty("bm_dark", "visibility", basemap === "dark" ? "visible" : "none");
       map.setLayoutProperty("bm_satellite", "visibility", basemap === "satellite" ? "visible" : "none");
       map.setLayoutProperty("bm_relief", "visibility", basemap === "relief" ? "visible" : "none");
       map.setLayoutProperty("overlay_roads", "visibility", showRoads ? "visible" : "none");
@@ -319,7 +336,7 @@ export default function MapView({
       });
 
       map.on("mousemove", "clubs_icons", (ev: MapMouseEvent & { features?: MapGeoJSONFeature[] }) => {
-        const f = ev.features?.[0];
+        const f = getTopClubFeature(ev.features);
         if (!f) return;
         map.getCanvas().style.cursor = "pointer";
 
@@ -355,7 +372,7 @@ export default function MapView({
         oe?.preventDefault?.();
         oe?.stopPropagation?.();
 
-        const f = ev.features?.[0];
+        const f = getTopClubFeature(ev.features);
         if (!f) return;
 
         const p = f.properties || {};
@@ -388,6 +405,7 @@ export default function MapView({
     if (!map.getLayer("bm_streets")) return;
 
     map.setLayoutProperty("bm_streets", "visibility", basemap === "streets" ? "visible" : "none");
+    map.setLayoutProperty("bm_dark", "visibility", basemap === "dark" ? "visible" : "none");
     map.setLayoutProperty("bm_satellite", "visibility", basemap === "satellite" ? "visible" : "none");
     map.setLayoutProperty("bm_relief", "visibility", basemap === "relief" ? "visible" : "none");
     map.setLayoutProperty("overlay_roads", "visibility", showRoads ? "visible" : "none");

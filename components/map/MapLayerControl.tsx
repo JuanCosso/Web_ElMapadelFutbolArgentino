@@ -5,10 +5,12 @@ import type { BasemapId } from "./style";
 
 function SegBtn({
   active,
+  isDark,
   children,
   onClick,
 }: {
   active?: boolean;
+  isDark?: boolean;
   children: React.ReactNode;
   onClick: () => void;
 }) {
@@ -19,7 +21,9 @@ function SegBtn({
       className={[
         "px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors",
         active
-          ? "bg-gray-900 text-white shadow-sm"
+          ? "bg-blue-600 text-white shadow-sm font-semibold"
+          : isDark
+          ? "bg-gray-800/80 hover:bg-gray-700 text-gray-200"
           : "bg-white/70 hover:bg-white text-gray-900",
       ].join(" ")}
     >
@@ -34,20 +38,68 @@ export default function MapLayerControl({
   roads,
   setRoads,
   onHome,
+  onZoomIn,
+  onZoomOut,
+  isDark,
 }: {
   basemap: BasemapId;
   setBasemap: (v: BasemapId) => void;
   roads: boolean;
   setRoads: (v: boolean) => void;
   onHome: (() => void) | null;
+  onZoomIn?: () => void;
+  onZoomOut?: () => void;
+  isDark?: boolean;
 }) {
   return (
     // Mobile & Desktop: bottom-right
-    <div className="absolute bottom-8 sm:bottom-6 right-3 sm:right-4 left-auto translate-x-0 z-20">
-      <div className="rounded-2xl bg-white/90 backdrop-blur-md border border-black/10 shadow-xl p-2 sm:p-3 space-y-2">
+    <div className="absolute bottom-8 sm:bottom-6 right-3 sm:right-4 left-auto translate-x-0 z-20 flex flex-col items-end gap-2.5">
+      {/* Botones de Zoom (+ / -) ubicados por encima del bloque de capas en el extremo derecho */}
+      <div
+        className={[
+          "flex flex-col rounded-xl backdrop-blur-md shadow-lg border overflow-hidden transition-colors shrink-0",
+          isDark
+            ? "bg-gray-900/90 border-white/20 text-white"
+            : "bg-white/90 border-black/10 text-gray-900",
+        ].join(" ")}
+      >
+        <button
+          type="button"
+          onClick={onZoomIn}
+          className={[
+            "w-9 h-9 flex items-center justify-center font-bold text-base transition-colors border-b",
+            isDark
+              ? "border-white/10 hover:bg-gray-800 text-white"
+              : "border-black/10 hover:bg-gray-100 text-gray-900",
+          ].join(" ")}
+          aria-label="Acercar zoom"
+        >
+          +
+        </button>
+        <button
+          type="button"
+          onClick={onZoomOut}
+          className={[
+            "w-9 h-9 flex items-center justify-center font-bold text-base transition-colors",
+            isDark ? "hover:bg-gray-800 text-white" : "hover:bg-gray-100 text-gray-900",
+          ].join(" ")}
+          aria-label="Alejar zoom"
+        >
+          −
+        </button>
+      </div>
 
+      {/* Bloque de Capas */}
+      <div
+        className={[
+          "rounded-2xl backdrop-blur-md shadow-xl p-2 sm:p-3 space-y-2 border transition-colors",
+          isDark
+            ? "bg-gray-900/90 border-white/20 text-white"
+            : "bg-white/90 border-black/10 text-gray-900",
+        ].join(" ")}
+      >
         <div className="flex items-center justify-between gap-3">
-          <div className="text-[11px] font-semibold tracking-wide text-gray-700 hidden sm:block">
+          <div className="text-[11px] font-semibold tracking-wide text-gray-400 hidden sm:block uppercase">
             Capas
           </div>
 
@@ -58,8 +110,10 @@ export default function MapLayerControl({
             className={[
               "px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center gap-1.5",
               onHome
-                ? "bg-white/70 hover:bg-white text-gray-900 border border-black/5"
-                : "bg-white/40 text-gray-400 border border-black/5 cursor-not-allowed",
+                ? isDark
+                  ? "bg-gray-800 hover:bg-gray-700 text-white border border-white/10"
+                  : "bg-white/70 hover:bg-white text-gray-900 border border-black/5"
+                : "opacity-40 cursor-not-allowed",
             ].join(" ")}
             aria-label="Volver a inicio"
           >
@@ -70,19 +124,22 @@ export default function MapLayerControl({
           </button>
         </div>
 
-        <div className="flex gap-1">
-          <SegBtn active={basemap === "streets"} onClick={() => setBasemap("streets")}>
-            Calles
+        <div className="flex gap-1 flex-wrap">
+          <SegBtn active={basemap === "streets"} isDark={isDark} onClick={() => setBasemap("streets")}>
+            Claro
           </SegBtn>
-          <SegBtn active={basemap === "satellite"} onClick={() => setBasemap("satellite")}>
+          <SegBtn active={basemap === "dark"} isDark={isDark} onClick={() => setBasemap("dark")}>
+            Oscuro
+          </SegBtn>
+          <SegBtn active={basemap === "satellite"} isDark={isDark} onClick={() => setBasemap("satellite")}>
             Satélite
           </SegBtn>
-          <SegBtn active={basemap === "relief"} onClick={() => setBasemap("relief")}>
+          <SegBtn active={basemap === "relief"} isDark={isDark} onClick={() => setBasemap("relief")}>
             Relieve
           </SegBtn>
         </div>
 
-        <label className="flex items-center gap-2 text-xs text-gray-800 select-none cursor-pointer">
+        <label className="flex items-center gap-2 text-xs select-none cursor-pointer">
           <input
             type="checkbox"
             checked={roads}

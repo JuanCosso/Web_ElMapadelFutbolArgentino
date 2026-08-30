@@ -1,7 +1,7 @@
 // components/map/style.ts
 import type { StyleSpecification } from "maplibre-gl";
 
-export type BasemapId = "streets" | "satellite" | "relief";
+export type BasemapId = "streets" | "satellite" | "relief" | "dark";
 
 const CLUBS_MINZOOM = 3;
 
@@ -14,6 +14,16 @@ export const STYLE: StyleSpecification = {
       tileSize: 256,
       tiles: [
         "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+      ],
+      attribution:
+        '&copy; <a href="https://www.esri.com/">Esri</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
+    },
+
+    esri_world_dark_gray: {
+      type: "raster",
+      tileSize: 256,
+      tiles: [
+        "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
       ],
       attribution:
         '&copy; <a href="https://www.esri.com/">Esri</a> &copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>',
@@ -57,6 +67,7 @@ export const STYLE: StyleSpecification = {
   layers: [
     // Basemaps
     { id: "bm_streets", type: "raster", source: "carto_voyager_nolabels", layout: { visibility: "visible" } },
+    { id: "bm_dark", type: "raster", source: "esri_world_dark_gray", layout: { visibility: "none" } },
     { id: "bm_satellite", type: "raster", source: "esri_world_imagery", layout: { visibility: "none" } },
     { id: "bm_relief", type: "raster", source: "esri_shaded_relief", layout: { visibility: "none" } },
     {
