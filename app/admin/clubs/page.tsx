@@ -1410,6 +1410,16 @@ export default function ClubManagerPage() {
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Fecha / Año de Fundación del Club</label>
+                  <input
+                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
+                    placeholder="Ej: 5 de mayo de 1905"
+                    value={foundation}
+                    onChange={(e) => setFoundation(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                   <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Identificador Slug (Opcional para forzar)</label>
                   <input
                     style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
@@ -1516,7 +1526,7 @@ export default function ClubManagerPage() {
           {activeFormTab === "STADIUM" && (
             <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
               <h3 style={{ fontSize: 13, fontWeight: 700, color: "#475569", textTransform: "uppercase", letterSpacing: "0.05em", margin: 0 }}>
-                Datos Institucionales, Cancha & Torneos Activos
+                Datos del Estadio & Torneos Activos
               </h3>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 14 }}>
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
@@ -1530,6 +1540,26 @@ export default function ClubManagerPage() {
                 </div>
 
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Latitud (Mapa) *</label>
+                  <input
+                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
+                    placeholder="Ej: -31.65"
+                    value={lat}
+                    onChange={(e) => setLat(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
+                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Longitud (Mapa) *</label>
+                  <input
+                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
+                    placeholder="Ej: -60.71"
+                    value={lng}
+                    onChange={(e) => setLng(e.target.value)}
+                  />
+                </div>
+
+                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                   <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Capacidad de Espectadores</label>
                   <input
                     style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
@@ -1538,34 +1568,6 @@ export default function ClubManagerPage() {
                     value={stadiumCapacity}
                     onChange={(e) => setStadiumCapacity(e.target.value)}
                   />
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Fecha / Año de Fundación</label>
-                  <input
-                    style={{ width: "100%", borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
-                    placeholder="Ej: 5 de mayo de 1905"
-                    value={foundation}
-                    onChange={(e) => setFoundation(e.target.value)}
-                  />
-                </div>
-
-                <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
-                  <label style={{ fontSize: 11, fontWeight: 700, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.05em" }}>Coordenadas Mapa (Latitud / Longitud) *</label>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <input
-                      style={{ flex: 1, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
-                      placeholder="Latitud (ej: -31.65)"
-                      value={lat}
-                      onChange={(e) => setLat(e.target.value)}
-                    />
-                    <input
-                      style={{ flex: 1, borderWidth: 1, borderStyle: "solid", borderColor: "#cbd5e1", borderRadius: 8, padding: "9px 12px", fontSize: 14, color: "#0f172a", backgroundColor: "#ffffff", outline: "none" }}
-                      placeholder="Longitud (ej: -60.71)"
-                      value={lng}
-                      onChange={(e) => setLng(e.target.value)}
-                    />
-                  </div>
                 </div>
               </div>
 
